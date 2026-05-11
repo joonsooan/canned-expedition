@@ -548,6 +548,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SdfMouseBrush
   mainCamera: {fileID: 330585545}
   densityField: {fileID: 1566601344}
+  raycastMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
   brushRadius: 2
   brushStrength: 0.5
 --- !u!1 &1566601343
@@ -560,6 +563,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1566601345}
   - component: {fileID: 1566601344}
+  - component: {fileID: 1566601346}
   m_Layer: 0
   m_Name: Density Field
   m_TagString: Untagged
@@ -589,12 +593,13 @@ MonoBehaviour:
   generator: {fileID: 715519454}
   terrainGenerator: {fileID: 715519455}
   refreshRate: 0.1
-  drawDensityGizmo: 1
+  drawDensityGizmo: 0
   gizmoMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
   gizmoMaterial: {fileID: 2100000, guid: 6365b0597384f5e4a844af22fc4f9d70, type: 2}
   gizmoSize: 0.1
   gizmoAlpha: 1
   surfaceMaterial: {fileID: 2100000, guid: 62ba023819385684ca70fd0a5e62518e, type: 2}
+  surfaceCollider: {fileID: 1566601346}
   editorGizmoRadius: 0.05
 --- !u!4 &1566601345
 Transform:
@@ -611,6 +616,28 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!64 &1566601346
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1566601343}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 5
+  m_Convex: 0
+  m_CookingOptions: 30
+  m_Mesh: {fileID: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

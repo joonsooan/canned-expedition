@@ -6,6 +6,7 @@ public class SdfMouseBrush : MonoBehaviour
     [Header("References")]
     [SerializeField] private Camera mainCamera;
     [SerializeField] private DensityField densityField;
+    [SerializeField] private LayerMask raycastMask = ~0;
 
     [Header("Brush Settings")]
     [SerializeField] private float brushRadius = 0.5f;
@@ -32,7 +33,20 @@ public class SdfMouseBrush : MonoBehaviour
     private bool TryGetWorldPos(out float3 worldPos)
     {
         Ray ray = mainCamera.ScreenPointToRay(Input.mousePosition);
-        return densityField.TryRayCastToField(ray, out worldPos);
+        worldPos = float3.zero;
+
+        MeshCollider targetCollider = densityField.SurfaceCollider;
+        if (targetCollider == null)
+            return false;
+
+        if (!Physics.Raycast(ray, out RaycastHit hit, Mathf.Infinity, raycastMask, QueryTriggerInteraction.Ignore))
+            return false;
+
+        if (hit.collider != targetCollider)
+            return false;
+
+        worldPos = (float3)hit.point;
+        return true;
     }
 
     private void OnDrawGizmos()

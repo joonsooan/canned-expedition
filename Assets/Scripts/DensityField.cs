@@ -46,6 +46,7 @@ public class DensityField : MonoBehaviour
 
     [Header("Iso surface")]
     [SerializeField] private Material surfaceMaterial;
+    [SerializeField] private MeshCollider surfaceCollider;
 
     [Header("Editor")]
     [Range(0.001f, 1f)]
@@ -64,6 +65,7 @@ public class DensityField : MonoBehaviour
     public float3 FieldOffset => fieldOffset;
     public float SphereRadius => generator != null ? generator.SphereRadius : 0f;
     public float3 WorldOrigin => (float3)transform.position + fieldOffset;
+    public MeshCollider SurfaceCollider => surfaceCollider;
 
     private void Awake()
     {
@@ -125,6 +127,7 @@ public class DensityField : MonoBehaviour
         ApplyBrushes();
 
         MarchingCubes.BuildMesh(isoSurfaceMesh, fieldData, resolution, IsoValue);
+        SyncSurfaceCollider();
         UpdateBounds();
     }
 
@@ -220,10 +223,22 @@ public class DensityField : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (surfaceCollider != null)
+            surfaceCollider.sharedMesh = null;
         gizmoBuffer?.Release();
         argsBuffer?.Release();
         if (isoSurfaceMesh != null)
             Destroy(isoSurfaceMesh);
+    }
+
+    private void SyncSurfaceCollider()
+    {
+        if (surfaceCollider == null)
+            return;
+
+        surfaceCollider.sharedMesh = null;
+        if (isoSurfaceMesh != null && isoSurfaceMesh.vertexCount > 0)
+            surfaceCollider.sharedMesh = isoSurfaceMesh;
     }
 
     public void AddBrush(float3 center, float radius, float strength, BrushType type)
