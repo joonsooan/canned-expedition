@@ -7,15 +7,24 @@ public struct FieldData
     public float density;
 }
 
+public enum DensityFieldMode
+{
+    Sphere,
+    Terrain
+}
+
 public class DensityField : MonoBehaviour
 {
     private static readonly int GizmoBufferProperty = Shader.PropertyToID("_GizmoBuffer");
+    private const float IsoValue = 0f;
 
     [Header("Field")]
+    [SerializeField] private DensityFieldMode fieldMode = DensityFieldMode.Sphere;
     [SerializeField] private int resolution = 16;
     [SerializeField] private float spacing = 1f;
     [SerializeField] private float3 fieldOffset;
     [SerializeField] private SphereDensityFieldGenerator generator;
+    [SerializeField] private TerrainDensityFieldGenerator terrainGenerator;
     [SerializeField] private float refreshRate = 0.3f;
 
     [Header("GPU Gizmo")]
@@ -23,6 +32,9 @@ public class DensityField : MonoBehaviour
     [SerializeField] private Material gizmoMaterial;
     [SerializeField] private float gizmoSize = 0.1f;
     [SerializeField] private float gizmoAlpha = 1f;
+
+    [Header("Iso surface")]
+    [SerializeField] private Material surfaceMaterial;
 
     [Header("Editor")]
     [SerializeField] private float editorGizmoRadius = 0.05f;
@@ -32,6 +44,7 @@ public class DensityField : MonoBehaviour
     private ComputeBuffer argsBuffer;
     private Bounds bounds;
     private float timer;
+    private Mesh isoSurfaceMesh;
 
     public FieldData[] FieldData => fieldData;
     public int Resolution => resolution;
@@ -39,6 +52,11 @@ public class DensityField : MonoBehaviour
     public float3 FieldOffset => fieldOffset;
     public float SphereRadius => generator != null ? generator.SphereRadius : 0f;
     public float3 WorldOrigin => (float3)transform.position + fieldOffset;
+
+    private void Awake()
+    {
+        isoSurfaceMesh = new Mesh { name = "IsoSurface" };
+    }
 
     private void Start()
     {
@@ -48,22 +66,28 @@ public class DensityField : MonoBehaviour
 
     private void Update()
     {
-        if (gizmoBuffer == null || argsBuffer == null) return;
+        if (fieldData == null) return;
 
         if (timer > refreshRate)
         {
             RefreshFieldContents();
-            gizmoBuffer.SetData(fieldData);
+            if (gizmoBuffer != null)
+                gizmoBuffer.SetData(fieldData);
             timer -= refreshRate;
         }
 
         timer += Time.deltaTime;
 
-        if (gizmoMesh != null && gizmoMaterial != null)
+        if (gizmoBuffer != null && argsBuffer != null && gizmoMesh != null && gizmoMaterial != null)
         {
             gizmoMaterial.SetFloat("_Size", gizmoSize);
             gizmoMaterial.SetFloat("_Alpha", gizmoAlpha);
             Graphics.DrawMeshInstancedIndirect(gizmoMesh, 0, gizmoMaterial, bounds, argsBuffer);
+        }
+
+        if (isoSurfaceMesh != null && surfaceMaterial != null && isoSurfaceMesh.vertexCount > 0)
+        {
+            Graphics.DrawMesh(isoSurfaceMesh, Matrix4x4.identity, surfaceMaterial, gameObject.layer);
         }
     }
 
@@ -101,8 +125,20 @@ public class DensityField : MonoBehaviour
             }
         }
 
-        if (generator != null)
-            generator.Apply(fieldData, origin);
+        switch (fieldMode)
+        {
+            case DensityFieldMode.Sphere:
+                if (generator != null)
+                    generator.Apply(fieldData, origin);
+                break;
+            case DensityFieldMode.Terrain:
+                if (terrainGenerator != null)
+                    terrainGenerator.Apply(fieldData, origin);
+                break;
+        }
+
+        if (isoSurfaceMesh != null)
+            MarchingCubes.BuildMesh(isoSurfaceMesh, fieldData, resolution, IsoValue);
 
         UpdateBounds();
     }
@@ -163,5 +199,7 @@ public class DensityField : MonoBehaviour
     {
         gizmoBuffer?.Release();
         argsBuffer?.Release();
+        if (isoSurfaceMesh != null)
+            Destroy(isoSurfaceMesh);
     }
 }
