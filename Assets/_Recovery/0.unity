@@ -444,12 +444,12 @@ MonoBehaviour:
   baseHeight: 0
   amplitude: 2
   noise:
-    noiseType: 0
+    noiseType: 2
     frequency: 0.08
     octaves: 5
     lacunarity: 2
     persistence: 0.5
-    seed: 0
+    seed: 1
     offset:
       x: 0
       y: 0
@@ -502,54 +502,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1048974487
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1048974488}
-  - component: {fileID: 1048974489}
-  m_Layer: 0
-  m_Name: Sdf Brush
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1048974488
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1048974487}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1048974489
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1048974487}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 07107ae45fb78de4a9cccfb712b88b89, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SdfMouseBrush
-  mainCamera: {fileID: 330585545}
-  densityField: {fileID: 1566601344}
-  brushRadius: 0.5
-  brushStrength: 0.5
 --- !u!1 &1566601343
 GameObject:
   m_ObjectHideFlags: 0
@@ -588,7 +540,7 @@ MonoBehaviour:
     z: 0
   generator: {fileID: 715519454}
   terrainGenerator: {fileID: 715519455}
-  refreshRate: 0.1
+  refreshRate: 0.3
   drawDensityGizmo: 1
   gizmoMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
   gizmoMaterial: {fileID: 2100000, guid: 6365b0597384f5e4a844af22fc4f9d70, type: 2}
@@ -620,4 +572,3 @@ SceneRoots:
   - {fileID: 832575519}
   - {fileID: 1566601345}
   - {fileID: 715519453}
-  - {fileID: 1048974488}

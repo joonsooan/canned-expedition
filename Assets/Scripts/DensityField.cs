@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -17,6 +18,7 @@ public class DensityField : MonoBehaviour
 {
     private static readonly int GizmoBufferProperty = Shader.PropertyToID("_GizmoBuffer");
     private const float IsoValue = 0f;
+    private List<BrushData> brushes = new List<BrushData>();
 
     [Header("Field")]
     [SerializeField] private DensityFieldMode fieldMode = DensityFieldMode.Sphere;
@@ -212,5 +214,18 @@ public class DensityField : MonoBehaviour
         argsBuffer?.Release();
         if (isoSurfaceMesh != null)
             Destroy(isoSurfaceMesh);
+    }
+
+    public void AddBrush(float3 center, float radius, float strength, BrushType type)
+    {
+        BrushData brush = new BrushData
+        {
+            center = center,
+            radius = radius,
+            strength = strength,
+            type = type
+        };
+
+        brushes.Add(brush);
     }
 }
