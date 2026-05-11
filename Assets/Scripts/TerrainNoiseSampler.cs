@@ -39,8 +39,8 @@ public static class TerrainNoiseSampler
         uint x = seed * 1597334677u;
         uint y = x ^ 3812015801u;
         return new float2(
-            ((x & 0xFFFFu) / 65535f) * 400f - 200f,
-            ((y & 0xFFFFu) / 65535f) * 400f - 200f);
+            (x & 0xFFFFu) / 65535f * 400f - 200f,
+            (y & 0xFFFFu) / 65535f * 400f - 200f);
     }
 
     private static int ClampOctaves(int octaves)
