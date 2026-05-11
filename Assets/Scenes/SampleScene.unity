@@ -131,6 +131,7 @@ GameObject:
   - component: {fileID: 330585545}
   - component: {fileID: 330585544}
   - component: {fileID: 330585547}
+  - component: {fileID: 330585548}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -256,6 +257,28 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
+--- !u!114 &330585548
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 330585543}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8bebd3e34bdd78c47b7318597b747c65, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CameraController
+  moveAction: {fileID: -1680190386980627800, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  riseAction: {fileID: -2099379676528639254, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  rotateHoldAction: {fileID: 3937336571468898466, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  lookDeltaAction: {fileID: 320918405357286050, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  moveSpeed: 8
+  verticalSpeed: 8
+  lookSensitivity: 0.1
+  invertY: 0
+  minPitch: -89
+  maxPitch: 89
 --- !u!1 &410087039
 GameObject:
   m_ObjectHideFlags: 0
@@ -551,7 +574,7 @@ MonoBehaviour:
   raycastMask:
     serializedVersion: 2
     m_Bits: 4294967295
-  brushRadius: 2
+  brushRadius: 1
   brushStrength: 0.5
 --- !u!1 &1566601343
 GameObject:
@@ -584,7 +607,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DensityField
   fieldMode: 1
-  resolution: 16
+  resolution: 32
   spacing: 1
   fieldOffset:
     x: 0
@@ -592,7 +615,7 @@ MonoBehaviour:
     z: 0
   generator: {fileID: 715519454}
   terrainGenerator: {fileID: 715519455}
-  refreshRate: 0.1
+  refreshRate: 0.05
   drawDensityGizmo: 0
   gizmoMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
   gizmoMaterial: {fileID: 2100000, guid: 6365b0597384f5e4a844af22fc4f9d70, type: 2}

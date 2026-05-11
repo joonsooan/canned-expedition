@@ -32,7 +32,7 @@ public class DensityField : MonoBehaviour
     [SerializeField] private SphereDensityFieldGenerator generator;
     [SerializeField] private TerrainDensityFieldGenerator terrainGenerator;
     [Tooltip("밀도·메시 갱신 최소 간격(초)")]
-    [Range(0.02f, 5f)]
+    [Range(0.02f, 1000f)]
     [SerializeField] private float refreshRate = 0.3f;
 
     [Header("GPU Gizmo")]
@@ -58,6 +58,7 @@ public class DensityField : MonoBehaviour
     private Bounds bounds;
     private float timer;
     private Mesh isoSurfaceMesh;
+    private bool isDirty = true;
 
     public FieldData[] FieldData => fieldData;
     public int Resolution => resolution;
@@ -82,15 +83,16 @@ public class DensityField : MonoBehaviour
     {
         if (fieldData == null) return;
 
-        if (timer > refreshRate)
+        timer += Time.deltaTime;
+
+        if (isDirty && timer >= refreshRate)
         {
             RefreshFieldContents();
             if (gizmoBuffer != null)
                 gizmoBuffer.SetData(fieldData);
-            timer -= refreshRate;
+            timer = 0f;
+            isDirty = false;
         }
-
-        timer += Time.deltaTime;
 
         if (drawDensityGizmo && gizmoBuffer != null && argsBuffer != null && gizmoMesh != null &&
             gizmoMaterial != null)
@@ -111,6 +113,7 @@ public class DensityField : MonoBehaviour
         timer = 0f;
         fieldData = new FieldData[resolution * resolution * resolution];
         RefreshFieldContents();
+        isDirty = false;
     }
 
     public int GetIndex(int x, int y, int z)
@@ -202,7 +205,7 @@ public class DensityField : MonoBehaviour
             args[0] = gizmoMesh.GetIndexCount(0);
             args[1] = (uint)count;
             args[2] = gizmoMesh.GetIndexStart(0);
-            args[3] = (uint)gizmoMesh.GetBaseVertex(0);
+            args[3] = gizmoMesh.GetBaseVertex(0);
         }
 
         argsBuffer = new ComputeBuffer(1, sizeof(uint) * args.Length, ComputeBufferType.IndirectArguments);
@@ -255,6 +258,7 @@ public class DensityField : MonoBehaviour
         };
 
         brushes.Add(brush);
+        isDirty = true;
     }
 
     private void ApplyBrushes()
@@ -272,7 +276,5 @@ public class DensityField : MonoBehaviour
             fd.density = density;
             fieldData[i] = fd;
         }
-
-        brushes.Clear();
     }
 }
