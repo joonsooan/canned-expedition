@@ -16,20 +16,21 @@ public struct BrushData
 
 public static class SdfBrush
 {
-    public static float Apply(float3 sdfCenter, BrushData brush)
+    public static float Apply(float baseDensity, float3 samplePosition, BrushData brush)
     {
-        float sphereSdf = math.length(brush.center - sdfCenter) - brush.radius;
+        float sphereSdf = math.length(brush.center - samplePosition) - brush.radius;
+        sphereSdf -= brush.strength;
 
         switch (brush.type)
         {
             case BrushType.Add:
-                return math.min(brush.strength, sphereSdf);
+                return math.min(baseDensity, sphereSdf);
 
             case BrushType.Subtract:
-                return math.max(brush.strength, -sphereSdf);
+                return math.max(baseDensity, -sphereSdf);
 
             default:
-                return 0;
+                return baseDensity;
         }
     }
 }

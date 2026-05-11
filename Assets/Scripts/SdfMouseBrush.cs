@@ -13,34 +13,36 @@ public class SdfMouseBrush : MonoBehaviour
 
     private void Update()
     {
+        if (mainCamera == null || densityField == null)
+            return;
+
+        if (!TryGetWorldPos(out float3 worldPos))
+            return;
+
         if (Input.GetMouseButton(0))
         {
-            densityField.AddBrush(GetWorldPos(), brushRadius, brushStrength, BrushType.Add);
+            densityField.AddBrush(worldPos, brushRadius, brushStrength, BrushType.Add);
         }
         else if (Input.GetMouseButton(1))
         {
-            densityField.AddBrush(GetWorldPos(), brushRadius, brushStrength, BrushType.Subtract);
+            densityField.AddBrush(worldPos, brushRadius, brushStrength, BrushType.Subtract);
         }
     }
 
-    private float3 GetWorldPos()
+    private bool TryGetWorldPos(out float3 worldPos)
     {
         Ray ray = mainCamera.ScreenPointToRay(Input.mousePosition);
-        float3 worldPos;
-        if (Physics.Raycast(ray, out RaycastHit hit))
-        {
-            worldPos = (float3)hit.point;
-        }
-        else
-        {
-            worldPos = float3.zero;
-        }
-        return worldPos;
+        return densityField.TryRayCastToField(ray, out worldPos);
     }
 
     private void OnDrawGizmos()
     {
+        if (mainCamera == null || densityField == null)
+            return;
+        if (!TryGetWorldPos(out float3 worldPos))
+            return;
+
         Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(GetWorldPos(), brushRadius);
+        Gizmos.DrawWireSphere(worldPos, brushRadius);
     }
 }

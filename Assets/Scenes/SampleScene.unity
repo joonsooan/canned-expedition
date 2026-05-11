@@ -548,7 +548,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SdfMouseBrush
   mainCamera: {fileID: 330585545}
   densityField: {fileID: 1566601344}
-  brushRadius: 0.5
+  brushRadius: 2
   brushStrength: 0.5
 --- !u!1 &1566601343
 GameObject:
@@ -589,7 +589,7 @@ MonoBehaviour:
   generator: {fileID: 715519454}
   terrainGenerator: {fileID: 715519455}
   refreshRate: 0.1
-  drawDensityGizmo: 0
+  drawDensityGizmo: 1
   gizmoMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
   gizmoMaterial: {fileID: 2100000, guid: 6365b0597384f5e4a844af22fc4f9d70, type: 2}
   gizmoSize: 0.1

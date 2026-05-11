@@ -276,14 +276,16 @@ public class DensityField : MonoBehaviour
 
         for (int i = 0; i < fieldData.Length; i++)
         {
-            float3 sdfCenter = fieldData[i].position;
+            FieldData fd = fieldData[i];
+            float density = fd.density;
             foreach (var brush in brushes)
             {
-                fieldData[i].density = SdfBrush.Apply(sdfCenter, brush);
+                density = SdfBrush.Apply(density, fd.position, brush);
             }
+            fd.density = density;
+            fieldData[i] = fd;
         }
 
-        MarchingCubes.BuildMesh(isoSurfaceMesh, fieldData, resolution, IsoValue);
         brushes.Clear();
     }
 }
