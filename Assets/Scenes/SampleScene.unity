@@ -393,6 +393,7 @@ GameObject:
   m_Component:
   - component: {fileID: 715519453}
   - component: {fileID: 715519452}
+  - component: {fileID: 715519454}
   m_Layer: 0
   m_Name: Field Generator
   m_TagString: Untagged
@@ -414,6 +415,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DensityField
   resolution: 16
   spacing: 1
+  fieldOffset:
+    x: 0
+    y: 0
+    z: 0
+  generator: {fileID: 715519454}
+  refreshRate: 0.3
+  gizmoMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+  gizmoMaterial: {fileID: 2100000, guid: 6365b0597384f5e4a844af22fc4f9d70, type: 2}
+  gizmoSize: 0.1
+  gizmoAlpha: 1
+  drawEditorGizmos: 0
+  editorGizmoRadius: 0.05
 --- !u!4 &715519453
 Transform:
   m_ObjectHideFlags: 0
@@ -429,6 +442,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &715519454
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 715519451}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7a4586a4b9994694684130c7c905980a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SphereDensityFieldGenerator
+  sphereRadius: 5
 --- !u!1 &832575517
 GameObject:
   m_ObjectHideFlags: 0
