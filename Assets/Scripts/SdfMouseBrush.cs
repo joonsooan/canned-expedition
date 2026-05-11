@@ -37,4 +37,10 @@ public class SdfMouseBrush : MonoBehaviour
         }
         return worldPos;
     }
+
+    private void OnDrawGizmos()
+    {
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(GetWorldPos(), brushRadius);
+    }
 }

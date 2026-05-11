@@ -120,6 +120,16 @@ public class DensityField : MonoBehaviour
     {
         if (fieldData == null) return;
 
+        float3 origin = InitializeFieldAndDensity();
+        ApplyGenerator(origin);
+        ApplyBrushes();
+
+        MarchingCubes.BuildMesh(isoSurfaceMesh, fieldData, resolution, IsoValue);
+        UpdateBounds();
+    }
+
+    private float3 InitializeFieldAndDensity()
+    {
         float3 centerCell = new float3(resolution / 2f, resolution / 2f, resolution / 2f);
         float3 origin = (float3)transform.position + fieldOffset;
         int index = 0;
@@ -138,6 +148,11 @@ public class DensityField : MonoBehaviour
             }
         }
 
+        return origin;
+    }
+
+    private void ApplyGenerator(float3 origin)
+    {
         switch (fieldMode)
         {
             case DensityFieldMode.Sphere:
@@ -149,11 +164,6 @@ public class DensityField : MonoBehaviour
                     terrainGenerator.Apply(fieldData, origin);
                 break;
         }
-
-        if (isoSurfaceMesh != null)
-            MarchingCubes.BuildMesh(isoSurfaceMesh, fieldData, resolution, IsoValue);
-
-        UpdateBounds();
     }
 
     private void UpdateBounds()
@@ -227,5 +237,53 @@ public class DensityField : MonoBehaviour
         };
 
         brushes.Add(brush);
+    }
+
+    public bool TryRayCastToField(Ray ray, out float3 hitPoint)
+    {
+        float3 center = (float3)transform.position + fieldOffset;
+        float half = (resolution - 1) * spacing * 0.5f;
+        float3 min = center - half;
+        float3 max = center + half;
+
+        hitPoint = float3.zero;
+        if (!RayAabb(ray.origin, ray.direction, min, max, out float t))
+            return false;
+
+        hitPoint = (float3)ray.origin + (float3)ray.direction * t;
+        return true;
+    }
+
+    private static bool RayAabb(Vector3 ro, Vector3 rd, float3 bmin, float3 bmax, out float tHit)
+    {
+        float3 inv = 1f / (float3)rd;
+        float3 t0 = (bmin - (float3)ro) * inv;
+        float3 t1 = (bmax - (float3)ro) * inv;
+
+        float3 tsm = math.min(t0, t1);
+        float3 tbg = math.max(t0, t1);
+
+        float tmin = math.cmax(tsm);
+        float tmax = math.cmin(tbg);
+
+        tHit = tmin >= 0f ? tmin : tmax;
+        return tmax >= math.max(0f, tmin);
+    }
+
+    private void ApplyBrushes()
+    {
+        if (brushes.Count == 0) return;
+
+        for (int i = 0; i < fieldData.Length; i++)
+        {
+            float3 sdfCenter = fieldData[i].position;
+            foreach (var brush in brushes)
+            {
+                fieldData[i].density = SdfBrush.Apply(sdfCenter, brush);
+            }
+        }
+
+        MarchingCubes.BuildMesh(isoSurfaceMesh, fieldData, resolution, IsoValue);
+        brushes.Clear();
     }
 }

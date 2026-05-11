@@ -445,7 +445,7 @@ MonoBehaviour:
   amplitude: 2
   noise:
     noiseType: 0
-    frequency: 0.08
+    frequency: 0.25
     octaves: 5
     lacunarity: 2
     persistence: 0.5
@@ -579,7 +579,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ac2fc34e4f0e1724881cd452b40e16df, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DensityField
-  fieldMode: 0
+  fieldMode: 1
   resolution: 16
   spacing: 1
   fieldOffset:
@@ -589,7 +589,7 @@ MonoBehaviour:
   generator: {fileID: 715519454}
   terrainGenerator: {fileID: 715519455}
   refreshRate: 0.1
-  drawDensityGizmo: 1
+  drawDensityGizmo: 0
   gizmoMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
   gizmoMaterial: {fileID: 2100000, guid: 6365b0597384f5e4a844af22fc4f9d70, type: 2}
   gizmoSize: 0.1
