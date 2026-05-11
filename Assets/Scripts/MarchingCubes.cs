@@ -23,15 +23,38 @@ public static class MarchingCubes
 
         var verts = new List<Vector3>(4096);
         var indices = new List<int>(6144);
+        int max = resolution - 1;
+        BuildMeshRange(data, resolution, isovalue, int3.zero, new int3(max, max, max), verts, indices);
+        ApplyMesh(mesh, verts, indices);
+    }
+
+    public static void BuildMeshRange(
+        FieldData[] data,
+        int resolution,
+        float isovalue,
+        int3 minCell,
+        int3 maxCell,
+        List<Vector3> verts,
+        List<int> indices)
+    {
+        if (data == null || resolution < 2 || data.Length < resolution * resolution * resolution)
+            return;
+        if (verts == null || indices == null)
+            return;
 
         int max = resolution - 1;
+        minCell = math.clamp(minCell, int3.zero, new int3(max - 1, max - 1, max - 1));
+        maxCell = math.clamp(maxCell, minCell, new int3(max, max, max));
+        if (math.any(maxCell <= minCell))
+            return;
+
         var edgePoints = new Vector3[12];
 
-        for (int z = 0; z < max; z++)
+        for (int z = minCell.z; z < maxCell.z; z++)
         {
-            for (int y = 0; y < max; y++)
+            for (int y = minCell.y; y < maxCell.y; y++)
             {
-                for (int x = 0; x < max; x++)
+                for (int x = minCell.x; x < maxCell.x; x++)
                 {
                     int i0 = Index(resolution, x, y, z);
                     int i1 = Index(resolution, x + 1, y, z);
@@ -132,7 +155,11 @@ public static class MarchingCubes
                 }
             }
         }
+    }
 
+    public static void ApplyMesh(Mesh mesh, List<Vector3> verts, List<int> indices)
+    {
+        mesh.Clear();
         if (verts.Count == 0)
             return;
 

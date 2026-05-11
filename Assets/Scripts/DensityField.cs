@@ -18,8 +18,10 @@ public class DensityField : MonoBehaviour
 {
     private static readonly int GizmoBufferProperty = Shader.PropertyToID("_GizmoBuffer");
     private const float IsoValue = 0f;
-    private readonly List<BrushData> brushes = new List<BrushData>(); // 전체 브러시
-    private readonly List<BrushData> pendingBrushes = new List<BrushData>(); // 새로운 브러시
+
+    private readonly List<BrushData> brushes = new List<BrushData>();
+    private readonly List<BrushData> pendingBrushes = new List<BrushData>();
+    private readonly ChunkManager chunkManager = new ChunkManager();
 
     [Header("Field")]
     [SerializeField] private DensityFieldMode fieldMode = DensityFieldMode.Sphere;
@@ -72,6 +74,24 @@ public class DensityField : MonoBehaviour
     public float3 WorldOrigin => (float3)transform.position + fieldOffset;
     public MeshCollider SurfaceCollider => surfaceCollider;
 
+    public void SetChunkLoadTarget(Transform target)
+    {
+        chunkManager.SetLoadTarget(target);
+        if (fieldData == null || isoSurfaceMesh == null)
+            return;
+
+        if (chunkManager.UpdateActiveChunks(true, brushes, pendingBrushes))
+        {
+            SyncSurfaceCollider();
+            UpdateBounds();
+        }
+    }
+
+    public bool TryGetChunkBounds(float3 worldPosition, out Bounds chunkBounds)
+    {
+        return chunkManager.TryGetChunkBounds(worldPosition, out chunkBounds);
+    }
+
     private void Awake()
     {
         isoSurfaceMesh = new Mesh { name = "IsoSurface" };
@@ -101,6 +121,20 @@ public class DensityField : MonoBehaviour
     private void Update()
     {
         if (fieldData == null) return;
+
+        bool hadPendingBrushes = pendingBrushes.Count > 0;
+        if (chunkManager.UpdateActiveChunks(false, brushes, pendingBrushes))
+        {
+            if (hadPendingBrushes)
+            {
+                pendingBrushes.Clear();
+                timer = 0f;
+                isDirty = false;
+                UpdateGizmoBuffer();
+            }
+            SyncSurfaceCollider();
+            UpdateBounds();
+        }
 
         timer += Time.deltaTime;
 
@@ -133,6 +167,7 @@ public class DensityField : MonoBehaviour
     {
         timer = 0f;
         fieldData = new FieldData[resolution * resolution * resolution];
+        chunkManager.Initialize(fieldData, resolution, spacing, WorldOrigin, isoSurfaceMesh, transform);
         RefreshFieldContents();
         isDirty = false;
     }
@@ -192,7 +227,8 @@ public class DensityField : MonoBehaviour
         pendingBrushes.Clear();
         requiresFullRefresh = false;
 
-        MarchingCubes.BuildMesh(isoSurfaceMesh, fieldData, resolution, IsoValue);
+        chunkManager.Initialize(fieldData, resolution, spacing, origin, isoSurfaceMesh, transform);
+        chunkManager.RebuildForFullField(brushes);
         SyncSurfaceCollider();
         UpdateBounds();
     }
@@ -201,10 +237,8 @@ public class DensityField : MonoBehaviour
     {
         if (pendingBrushes.Count == 0) return;
 
-        ApplyBrushes(pendingBrushes);
+        chunkManager.RefreshPendingBrushes(brushes, pendingBrushes);
         pendingBrushes.Clear();
-
-        MarchingCubes.BuildMesh(isoSurfaceMesh, fieldData, resolution, IsoValue);
         SyncSurfaceCollider();
         UpdateBounds();
     }
@@ -331,6 +365,9 @@ public class DensityField : MonoBehaviour
             strength = strength,
             type = type
         };
+
+        if (!chunkManager.MarkBrushChunksDirty(brush))
+            return;
 
         brushes.Add(brush);
         pendingBrushes.Add(brush);

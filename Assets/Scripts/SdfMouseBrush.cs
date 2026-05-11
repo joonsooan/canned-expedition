@@ -77,6 +77,14 @@ public class SdfMouseBrush : MonoBehaviour
         if (!TryGetWorldPos(out float3 worldPos))
             return;
 
+        if (densityField.TryGetChunkBounds(worldPos, out Bounds chunkBounds))
+        {
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawWireCube(chunkBounds.center, chunkBounds.size);
+        }
+
+        Gizmos.color = new Color(1f, 0f, 0f, 0.2f);
+        Gizmos.DrawSphere(worldPos, brushRadius);
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(worldPos, brushRadius);
     }

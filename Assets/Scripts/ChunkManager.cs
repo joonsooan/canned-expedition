@@ -1,0 +1,458 @@
+using System.Collections.Generic;
+using Unity.Mathematics;
+using UnityEngine;
+
+public class ChunkManager
+{
+    private const int ChunkSize = 8;
+    private const int LoadRadiusInChunks = 1;
+    private const float IsoValue = 0f;
+
+    private struct ChunkCoord
+    {
+        public readonly int x;
+        public readonly int y;
+        public readonly int z;
+
+        public ChunkCoord(int x, int y, int z)
+        {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (!(obj is ChunkCoord other))
+                return false;
+
+            return x == other.x && y == other.y && z == other.z;
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = hash * 31 + x;
+                hash = hash * 31 + y;
+                hash = hash * 31 + z;
+                return hash;
+            }
+        }
+    }
+
+    private class ChunkData
+    {
+        public ChunkCoord coord;
+        public int3 minCell;
+        public int3 maxCell;
+        public readonly List<Vector3> vertices = new List<Vector3>(1024);
+        public readonly List<int> indices = new List<int>(1536);
+        public bool dirty;
+        public bool brushDirty;
+    }
+
+    private readonly Dictionary<ChunkCoord, ChunkData> activeChunks = new Dictionary<ChunkCoord, ChunkData>();
+    private readonly List<Vector3> combinedVertices = new List<Vector3>(4096);
+    private readonly List<int> combinedIndices = new List<int>(6144);
+    private readonly HashSet<int> updatedSampleIndices = new HashSet<int>();
+    private readonly List<ChunkCoord> coordsToRemove = new List<ChunkCoord>();
+    private readonly Dictionary<ChunkCoord, int> appliedBrushCounts = new Dictionary<ChunkCoord, int>();
+
+    private FieldData[] fieldData;
+    private int resolution;
+    private float spacing;
+    private float3 worldOrigin;
+    private Mesh isoSurfaceMesh;
+    private Transform chunkLoadTarget;
+    private Transform fallbackChunkLoadTarget;
+    private int chunkCountPerAxis = 1;
+    private int defaultAppliedBrushCount;
+    private bool hasTargetChunk;
+    private ChunkCoord lastTargetChunk;
+
+    public void Initialize(FieldData[] data, int fieldResolution, float fieldSpacing, float3 origin, Mesh mesh, Transform fallbackTarget)
+    {
+        fieldData = data;
+        resolution = fieldResolution;
+        spacing = fieldSpacing;
+        worldOrigin = origin;
+        isoSurfaceMesh = mesh;
+        fallbackChunkLoadTarget = fallbackTarget;
+        ResetChunks();
+    }
+
+    public void SetLoadTarget(Transform target)
+    {
+        chunkLoadTarget = target;
+        hasTargetChunk = false;
+    }
+
+    public void RebuildForFullField(List<BrushData> brushes)
+    {
+        appliedBrushCounts.Clear();
+        defaultAppliedBrushCount = brushes.Count;
+        ResetChunks();
+        UpdateActiveChunks(true, brushes, null);
+    }
+
+    public bool UpdateActiveChunks(bool force, List<BrushData> brushes, List<BrushData> pendingBrushes)
+    {
+        if (fieldData == null || resolution < 2 || isoSurfaceMesh == null)
+            return false;
+
+        ChunkCoord targetChunk = GetTargetChunkCoord();
+        if (!force && hasTargetChunk && lastTargetChunk.Equals(targetChunk))
+            return false;
+
+        if (!force && pendingBrushes != null && pendingBrushes.Count > 0 && hasTargetChunk)
+            RefreshPendingBrushes(brushes, pendingBrushes);
+
+        hasTargetChunk = true;
+        lastTargetChunk = targetChunk;
+
+        var desired = new HashSet<ChunkCoord>();
+        int minX = math.max(0, targetChunk.x - LoadRadiusInChunks);
+        int maxX = math.min(chunkCountPerAxis - 1, targetChunk.x + LoadRadiusInChunks);
+        int minZ = math.max(0, targetChunk.z - LoadRadiusInChunks);
+        int maxZ = math.min(chunkCountPerAxis - 1, targetChunk.z + LoadRadiusInChunks);
+
+        for (int z = minZ; z <= maxZ; z++)
+        {
+            for (int y = 0; y < chunkCountPerAxis; y++)
+            {
+                for (int x = minX; x <= maxX; x++)
+                {
+                    desired.Add(new ChunkCoord(x, y, z));
+                }
+            }
+        }
+
+        coordsToRemove.Clear();
+        foreach (var pair in activeChunks)
+        {
+            if (!desired.Contains(pair.Key))
+                coordsToRemove.Add(pair.Key);
+        }
+
+        bool changed = force || coordsToRemove.Count > 0;
+        for (int i = 0; i < coordsToRemove.Count; i++)
+        {
+            activeChunks.Remove(coordsToRemove[i]);
+        }
+
+        foreach (var coord in desired)
+        {
+            if (activeChunks.ContainsKey(coord))
+                continue;
+
+            activeChunks.Add(coord, CreateChunk(coord));
+            changed = true;
+        }
+
+        if (force)
+        {
+            foreach (var chunk in activeChunks.Values)
+            {
+                chunk.dirty = true;
+                chunk.brushDirty = false;
+            }
+        }
+
+        if (!changed)
+            return false;
+
+        ApplyMissingBrushesToDirtyChunks(brushes);
+        RebuildDirtyChunks();
+        RebuildCombinedMesh();
+        return true;
+    }
+
+    public bool MarkBrushChunksDirty(BrushData brush)
+    {
+        if (!TryGetBrushCellBounds(brush, out int3 minCell, out int3 maxCell))
+            return false;
+
+        ChunkCoord minChunk = CellToChunkCoord(minCell);
+        ChunkCoord maxChunk = CellToChunkCoord(maxCell);
+        bool markedAny = false;
+
+        for (int z = minChunk.z; z <= maxChunk.z; z++)
+        {
+            for (int y = minChunk.y; y <= maxChunk.y; y++)
+            {
+                for (int x = minChunk.x; x <= maxChunk.x; x++)
+                {
+                    var coord = new ChunkCoord(x, y, z);
+                    if (!activeChunks.TryGetValue(coord, out ChunkData chunk))
+                        continue;
+
+                    chunk.dirty = true;
+                    chunk.brushDirty = true;
+                    markedAny = true;
+                }
+            }
+        }
+
+        return markedAny;
+    }
+
+    public bool RefreshPendingBrushes(List<BrushData> brushes, List<BrushData> pendingBrushes)
+    {
+        if (pendingBrushes == null || pendingBrushes.Count == 0)
+            return false;
+
+        ApplyPendingBrushesToDirtyChunks(brushes, pendingBrushes);
+        ApplyMissingBrushesToDirtyChunks(brushes);
+        RebuildDirtyChunks();
+        RebuildCombinedMesh();
+        return true;
+    }
+
+    public bool TryGetChunkBounds(float3 worldPosition, out Bounds bounds)
+    {
+        bounds = default;
+        if (fieldData == null || resolution < 2)
+            return false;
+
+        int maxCell = resolution - 2;
+        int3 cell = WorldToCellCoord(worldPosition);
+        if (cell.x < 0 || cell.y < 0 || cell.z < 0 ||
+            cell.x > maxCell || cell.y > maxCell || cell.z > maxCell)
+            return false;
+
+        ChunkCoord coord = CellToChunkCoord(cell);
+        ChunkData chunk = activeChunks.TryGetValue(coord, out ChunkData activeChunk)
+            ? activeChunk
+            : CreateChunk(coord);
+
+        float3 centerCell = new float3(resolution / 2f, resolution / 2f, resolution / 2f);
+        float3 min = (chunk.minCell - centerCell) * spacing + worldOrigin;
+        float3 max = (chunk.maxCell + new int3(1, 1, 1) - centerCell) * spacing + worldOrigin;
+        bounds = new Bounds((Vector3)((min + max) * 0.5f), (Vector3)(max - min));
+        return true;
+    }
+
+    private void ResetChunks()
+    {
+        activeChunks.Clear();
+        coordsToRemove.Clear();
+        int cellCount = math.max(1, resolution - 1);
+        chunkCountPerAxis = math.max(1, (cellCount + ChunkSize - 1) / ChunkSize);
+        hasTargetChunk = false;
+    }
+
+    private ChunkData CreateChunk(ChunkCoord coord)
+    {
+        int3 minCell = new int3(coord.x, coord.y, coord.z) * ChunkSize;
+        int maxCell = resolution - 1;
+        int3 max = new int3(maxCell, maxCell, maxCell);
+        int3 maxCellExclusive = math.min(minCell + ChunkSize, max);
+
+        return new ChunkData
+        {
+            coord = coord,
+            minCell = minCell,
+            maxCell = maxCellExclusive,
+            dirty = true,
+            brushDirty = false
+        };
+    }
+
+    private Transform GetChunkLoadTarget()
+    {
+        if (chunkLoadTarget != null)
+            return chunkLoadTarget;
+
+        if (fallbackChunkLoadTarget == null)
+        {
+            Camera mainCamera = Camera.main;
+            fallbackChunkLoadTarget = mainCamera != null ? mainCamera.transform : null;
+        }
+
+        return fallbackChunkLoadTarget;
+    }
+
+    private ChunkCoord GetTargetChunkCoord()
+    {
+        Transform target = GetChunkLoadTarget();
+        float3 targetPosition = target != null ? (float3)target.position : worldOrigin;
+        int3 cell = WorldToCellCoord(targetPosition);
+        int maxCell = resolution - 2;
+        cell = math.clamp(cell, int3.zero, new int3(maxCell, maxCell, maxCell));
+        return CellToChunkCoord(cell);
+    }
+
+    private int3 WorldToCellCoord(float3 worldPosition)
+    {
+        float3 centerCell = new float3(resolution / 2f, resolution / 2f, resolution / 2f);
+        float3 grid = (worldPosition - worldOrigin) / spacing + centerCell;
+        return (int3)math.floor(grid);
+    }
+
+    private ChunkCoord CellToChunkCoord(int3 cell)
+    {
+        int maxCell = resolution - 2;
+        cell = math.clamp(cell, int3.zero, new int3(maxCell, maxCell, maxCell));
+        int3 chunk = cell / ChunkSize;
+        return new ChunkCoord(chunk.x, chunk.y, chunk.z);
+    }
+
+    private bool TryGetBrushCellBounds(BrushData brush, out int3 minCell, out int3 maxCell)
+    {
+        float influence = brush.radius + math.abs(brush.strength) + spacing;
+        float3 extent = new float3(influence);
+        int3 rawMin = WorldToCellCoord(brush.center - extent);
+        int3 rawMax = WorldToCellCoord(brush.center + extent);
+        int max = resolution - 2;
+
+        if (rawMax.x < 0 || rawMax.y < 0 || rawMax.z < 0 ||
+            rawMin.x > max || rawMin.y > max || rawMin.z > max)
+        {
+            minCell = int3.zero;
+            maxCell = int3.zero;
+            return false;
+        }
+
+        minCell = math.clamp(rawMin, int3.zero, new int3(max, max, max));
+        maxCell = math.clamp(rawMax, int3.zero, new int3(max, max, max));
+        return true;
+    }
+
+    private void ApplyPendingBrushesToDirtyChunks(List<BrushData> brushes, List<BrushData> pendingBrushes)
+    {
+        updatedSampleIndices.Clear();
+
+        foreach (var chunk in activeChunks.Values)
+        {
+            if (!chunk.brushDirty)
+                continue;
+
+            ApplyBrushesToChunkSamples(chunk, pendingBrushes);
+            chunk.brushDirty = false;
+            appliedBrushCounts[chunk.coord] = brushes.Count;
+        }
+    }
+
+    private void ApplyMissingBrushesToDirtyChunks(List<BrushData> brushes)
+    {
+        if (brushes == null || brushes.Count == 0)
+            return;
+
+        updatedSampleIndices.Clear();
+
+        foreach (var chunk in activeChunks.Values)
+        {
+            if (!chunk.dirty)
+                continue;
+
+            int appliedCount = GetAppliedBrushCount(chunk.coord);
+            if (appliedCount >= brushes.Count)
+                continue;
+
+            ApplyBrushRangeToChunkSamples(chunk, brushes, appliedCount, brushes.Count);
+            appliedBrushCounts[chunk.coord] = brushes.Count;
+        }
+    }
+
+    private int GetAppliedBrushCount(ChunkCoord coord)
+    {
+        return appliedBrushCounts.TryGetValue(coord, out int count) ? count : defaultAppliedBrushCount;
+    }
+
+    private void ApplyBrushRangeToChunkSamples(ChunkData chunk, List<BrushData> brushes, int startIndex, int endIndex)
+    {
+        int sampleMax = resolution - 1;
+        int3 min = math.clamp(chunk.minCell, int3.zero, new int3(sampleMax, sampleMax, sampleMax));
+        int3 max = math.clamp(chunk.maxCell, int3.zero, new int3(sampleMax, sampleMax, sampleMax));
+
+        for (int z = min.z; z <= max.z; z++)
+        {
+            for (int y = min.y; y <= max.y; y++)
+            {
+                for (int x = min.x; x <= max.x; x++)
+                {
+                    int index = GetIndex(x, y, z);
+                    if (!updatedSampleIndices.Add(index))
+                        continue;
+
+                    FieldData fd = fieldData[index];
+                    float density = fd.density;
+                    for (int i = startIndex; i < endIndex; i++)
+                    {
+                        density = SdfBrush.Apply(density, fd.position, brushes[i]);
+                    }
+                    fd.density = density;
+                    fieldData[index] = fd;
+                }
+            }
+        }
+    }
+
+    private void ApplyBrushesToChunkSamples(ChunkData chunk, List<BrushData> source)
+    {
+        int sampleMax = resolution - 1;
+        int3 min = math.clamp(chunk.minCell, int3.zero, new int3(sampleMax, sampleMax, sampleMax));
+        int3 max = math.clamp(chunk.maxCell, int3.zero, new int3(sampleMax, sampleMax, sampleMax));
+
+        for (int z = min.z; z <= max.z; z++)
+        {
+            for (int y = min.y; y <= max.y; y++)
+            {
+                for (int x = min.x; x <= max.x; x++)
+                {
+                    int index = GetIndex(x, y, z);
+                    if (!updatedSampleIndices.Add(index))
+                        continue;
+
+                    FieldData fd = fieldData[index];
+                    float density = fd.density;
+                    foreach (var brush in source)
+                    {
+                        density = SdfBrush.Apply(density, fd.position, brush);
+                    }
+                    fd.density = density;
+                    fieldData[index] = fd;
+                }
+            }
+        }
+    }
+
+    private void RebuildDirtyChunks()
+    {
+        foreach (var chunk in activeChunks.Values)
+        {
+            if (!chunk.dirty)
+                continue;
+
+            chunk.vertices.Clear();
+            chunk.indices.Clear();
+            MarchingCubes.BuildMeshRange(fieldData, resolution, IsoValue, chunk.minCell, chunk.maxCell, chunk.vertices, chunk.indices);
+            chunk.dirty = false;
+        }
+    }
+
+    private void RebuildCombinedMesh()
+    {
+        combinedVertices.Clear();
+        combinedIndices.Clear();
+
+        foreach (var chunk in activeChunks.Values)
+        {
+            int offset = combinedVertices.Count;
+            combinedVertices.AddRange(chunk.vertices);
+            for (int i = 0; i < chunk.indices.Count; i++)
+            {
+                combinedIndices.Add(chunk.indices[i] + offset);
+            }
+        }
+
+        MarchingCubes.ApplyMesh(isoSurfaceMesh, combinedVertices, combinedIndices);
+    }
+
+    private int GetIndex(int x, int y, int z)
+    {
+        return x + resolution * y + resolution * resolution * z;
+    }
+}
