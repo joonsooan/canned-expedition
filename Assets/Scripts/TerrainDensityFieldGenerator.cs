@@ -12,6 +12,8 @@ public class TerrainDensityFieldGenerator : MonoBehaviour
     [Header("Noise")]
     [SerializeField] private TerrainNoiseConfig noise = TerrainNoiseConfig.Default;
 
+    public event System.Action Changed;
+
     public void Apply(FieldData[] data, float3 sdfCenter)
     {
         float amp = amplitude;
@@ -37,5 +39,6 @@ public class TerrainDensityFieldGenerator : MonoBehaviour
         n.persistence = math.clamp(n.persistence, 1e-4f, 1f);
         n.frequency = math.max(1e-6f, n.frequency);
         noise = n;
+        Changed?.Invoke();
     }
 }

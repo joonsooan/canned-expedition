@@ -18,7 +18,8 @@ public class DensityField : MonoBehaviour
 {
     private static readonly int GizmoBufferProperty = Shader.PropertyToID("_GizmoBuffer");
     private const float IsoValue = 0f;
-    private List<BrushData> brushes = new List<BrushData>();
+    private readonly List<BrushData> brushes = new List<BrushData>(); // 전체 브러시
+    private readonly List<BrushData> pendingBrushes = new List<BrushData>(); // 새로운 브러시
 
     [Header("Field")]
     [SerializeField] private DensityFieldMode fieldMode = DensityFieldMode.Sphere;
@@ -59,6 +60,9 @@ public class DensityField : MonoBehaviour
     private float timer;
     private Mesh isoSurfaceMesh;
     private bool isDirty = true;
+    private bool requiresFullRefresh = true;
+    private SphereDensityFieldGenerator subscribedGenerator;
+    private TerrainDensityFieldGenerator subscribedTerrainGenerator;
 
     public FieldData[] FieldData => fieldData;
     public int Resolution => resolution;
@@ -73,10 +77,25 @@ public class DensityField : MonoBehaviour
         isoSurfaceMesh = new Mesh { name = "IsoSurface" };
     }
 
+    private void OnEnable()
+    {
+        SubscribeGeneratorChanges();
+    }
+
+    private void OnDisable()
+    {
+        UnsubscribeGeneratorChanges();
+    }
+
     private void Start()
     {
         InitializeField();
         InitializeGizmo();
+    }
+
+    private void OnValidate()
+    {
+        SubscribeGeneratorChanges();
     }
 
     private void Update()
@@ -87,9 +106,11 @@ public class DensityField : MonoBehaviour
 
         if (isDirty && timer >= refreshRate)
         {
-            RefreshFieldContents();
-            if (gizmoBuffer != null)
-                gizmoBuffer.SetData(fieldData);
+            if (requiresFullRefresh)
+                RefreshFieldContents();
+            else
+                RefreshPendingBrushes();
+            UpdateGizmoBuffer();
             timer = 0f;
             isDirty = false;
         }
@@ -116,6 +137,48 @@ public class DensityField : MonoBehaviour
         isDirty = false;
     }
 
+    private void SubscribeGeneratorChanges()
+    {
+        if (subscribedGenerator == generator && subscribedTerrainGenerator == terrainGenerator)
+            return;
+
+        UnsubscribeGeneratorChanges();
+
+        subscribedGenerator = generator;
+        subscribedTerrainGenerator = terrainGenerator;
+
+        if (subscribedGenerator != null)
+            subscribedGenerator.Changed += HandleGeneratorChanged;
+        if (subscribedTerrainGenerator != null)
+            subscribedTerrainGenerator.Changed += HandleGeneratorChanged;
+    }
+
+    private void UnsubscribeGeneratorChanges()
+    {
+        if (subscribedGenerator != null)
+            subscribedGenerator.Changed -= HandleGeneratorChanged;
+        if (subscribedTerrainGenerator != null)
+            subscribedTerrainGenerator.Changed -= HandleGeneratorChanged;
+
+        subscribedGenerator = null;
+        subscribedTerrainGenerator = null;
+    }
+
+    private void HandleGeneratorChanged()
+    {
+        if (!Application.isPlaying || isoSurfaceMesh == null)
+        {
+            isDirty = true;
+            requiresFullRefresh = true;
+            return;
+        }
+
+        RefreshFieldContents();
+        UpdateGizmoBuffer();
+        timer = 0f;
+        isDirty = false;
+    }
+
     public int GetIndex(int x, int y, int z)
     {
         return x + resolution * y + resolution * resolution * z;
@@ -123,11 +186,23 @@ public class DensityField : MonoBehaviour
 
     private void RefreshFieldContents()
     {
-        if (fieldData == null) return;
-
         float3 origin = InitializeFieldAndDensity();
         ApplyGenerator(origin);
         ApplyBrushes();
+        pendingBrushes.Clear();
+        requiresFullRefresh = false;
+
+        MarchingCubes.BuildMesh(isoSurfaceMesh, fieldData, resolution, IsoValue);
+        SyncSurfaceCollider();
+        UpdateBounds();
+    }
+
+    private void RefreshPendingBrushes()
+    {
+        if (pendingBrushes.Count == 0) return;
+
+        ApplyBrushes(pendingBrushes);
+        pendingBrushes.Clear();
 
         MarchingCubes.BuildMesh(isoSurfaceMesh, fieldData, resolution, IsoValue);
         SyncSurfaceCollider();
@@ -258,23 +333,35 @@ public class DensityField : MonoBehaviour
         };
 
         brushes.Add(brush);
+        pendingBrushes.Add(brush);
         isDirty = true;
     }
 
     private void ApplyBrushes()
     {
-        if (brushes.Count == 0) return;
+        ApplyBrushes(brushes);
+    }
+
+    private void ApplyBrushes(List<BrushData> source)
+    {
+        if (source.Count == 0) return;
 
         for (int i = 0; i < fieldData.Length; i++)
         {
             FieldData fd = fieldData[i];
             float density = fd.density;
-            foreach (var brush in brushes)
+            foreach (var brush in source)
             {
                 density = SdfBrush.Apply(density, fd.position, brush);
             }
             fd.density = density;
             fieldData[i] = fd;
         }
+    }
+
+    private void UpdateGizmoBuffer()
+    {
+        if (gizmoBuffer != null)
+            gizmoBuffer.SetData(fieldData);
     }
 }

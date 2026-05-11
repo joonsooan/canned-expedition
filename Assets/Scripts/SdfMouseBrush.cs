@@ -12,22 +12,43 @@ public class SdfMouseBrush : MonoBehaviour
     [SerializeField] private float brushRadius = 0.5f;
     [SerializeField] private float brushStrength = 0.5f;
 
+    private bool hasLastBrush;
+    private float3 lastBrushPosition;
+    private BrushType lastBrushType;
+
     private void Update()
     {
         if (mainCamera == null || densityField == null)
             return;
 
+        bool addPressed = Input.GetMouseButton(0);
+        bool subtractPressed = Input.GetMouseButton(1);
+        if (!addPressed && !subtractPressed)
+        {
+            hasLastBrush = false;
+            return;
+        }
+
         if (!TryGetWorldPos(out float3 worldPos))
             return;
 
-        if (Input.GetMouseButton(0))
-        {
-            densityField.AddBrush(worldPos, brushRadius, brushStrength, BrushType.Add);
-        }
-        else if (Input.GetMouseButton(1))
-        {
-            densityField.AddBrush(worldPos, brushRadius, brushStrength, BrushType.Subtract);
-        }
+        BrushType brushType = addPressed ? BrushType.Add : BrushType.Subtract;
+        if (!ShouldPlaceBrush(worldPos, brushType))
+            return;
+
+        densityField.AddBrush(worldPos, brushRadius, brushStrength, brushType);
+        lastBrushPosition = worldPos;
+        lastBrushType = brushType;
+        hasLastBrush = true;
+    }
+
+    private bool ShouldPlaceBrush(float3 worldPos, BrushType brushType)
+    {
+        if (!hasLastBrush || lastBrushType != brushType)
+            return true;
+
+        float spacing = math.max(brushRadius * 0.1f, 0.001f);
+        return math.distancesq(worldPos, lastBrushPosition) >= spacing * spacing;
     }
 
     private bool TryGetWorldPos(out float3 worldPos)

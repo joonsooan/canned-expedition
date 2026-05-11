@@ -6,6 +6,8 @@ public class SphereDensityFieldGenerator : MonoBehaviour
     [Range(0.01f, 100f)]
     [SerializeField] private float sphereRadius = 5f;
 
+    public event System.Action Changed;
+
     public float SphereRadius => sphereRadius;
 
     public void Apply(FieldData[] data, float3 sdfCenter)
@@ -17,5 +19,10 @@ public class SphereDensityFieldGenerator : MonoBehaviour
             fd.density = math.length(fd.position - sdfCenter) - r;
             data[i] = fd;
         }
+    }
+
+    private void OnValidate()
+    {
+        Changed?.Invoke();
     }
 }
