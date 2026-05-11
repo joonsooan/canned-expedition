@@ -234,7 +234,10 @@ public class DensityField : MonoBehaviour
     private void SyncSurfaceCollider()
     {
         if (surfaceCollider == null)
+        {
+            Debug.LogWarning("Mesh Collider not assigned");
             return;
+        }
 
         surfaceCollider.sharedMesh = null;
         if (isoSurfaceMesh != null && isoSurfaceMesh.vertexCount > 0)
@@ -252,37 +255,6 @@ public class DensityField : MonoBehaviour
         };
 
         brushes.Add(brush);
-    }
-
-    public bool TryRayCastToField(Ray ray, out float3 hitPoint)
-    {
-        float3 center = (float3)transform.position + fieldOffset;
-        float half = (resolution - 1) * spacing * 0.5f;
-        float3 min = center - half;
-        float3 max = center + half;
-
-        hitPoint = float3.zero;
-        if (!RayAabb(ray.origin, ray.direction, min, max, out float t))
-            return false;
-
-        hitPoint = (float3)ray.origin + (float3)ray.direction * t;
-        return true;
-    }
-
-    private static bool RayAabb(Vector3 ro, Vector3 rd, float3 bmin, float3 bmax, out float tHit)
-    {
-        float3 inv = 1f / (float3)rd;
-        float3 t0 = (bmin - (float3)ro) * inv;
-        float3 t1 = (bmax - (float3)ro) * inv;
-
-        float3 tsm = math.min(t0, t1);
-        float3 tbg = math.max(t0, t1);
-
-        float tmin = math.cmax(tsm);
-        float tmax = math.cmin(tbg);
-
-        tHit = tmin >= 0f ? tmin : tmax;
-        return tmax >= math.max(0f, tmin);
     }
 
     private void ApplyBrushes()
