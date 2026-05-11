@@ -347,7 +347,7 @@ Transform:
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1, z: -30}
+  m_LocalPosition: {x: 0, y: 1, z: -20}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -605,9 +605,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TerrainDensityFieldGenerator
   baseHeight: 0
-  amplitude: 2
+  amplitude: 5
   noise:
-    noiseType: 2
+    noiseType: 1
     frequency: 0.25
     octaves: 5
     lacunarity: 2
@@ -761,7 +761,7 @@ MonoBehaviour:
   gizmoMaterial: {fileID: 2100000, guid: 6365b0597384f5e4a844af22fc4f9d70, type: 2}
   gizmoSize: 0.1
   gizmoAlpha: 1
-  surfaceMaterial: {fileID: 2100000, guid: 62ba023819385684ca70fd0a5e62518e, type: 2}
+  surfaceMaterial: {fileID: 2100000, guid: 0f8009d4c3cc5154ea6a0239f9c06536, type: 2}
   surfaceCollider: {fileID: 1566601346}
   editorGizmoRadius: 0.05
 --- !u!4 &1566601345

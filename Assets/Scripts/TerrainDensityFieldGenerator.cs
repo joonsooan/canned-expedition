@@ -4,9 +4,9 @@ using UnityEngine;
 public class TerrainDensityFieldGenerator : MonoBehaviour
 {
     [Header("Terrain height")]
-    [Range(-100f, 100f)]
+    [Range(-20f, 20f)]
     [SerializeField] private float baseHeight;
-    [Range(0f, 50f)]
+    [Range(0f, 10f)]
     [SerializeField] private float amplitude = 2f;
 
     [Header("Noise")]
