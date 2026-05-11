@@ -3,6 +3,7 @@ using UnityEngine;
 
 public class SphereDensityFieldGenerator : MonoBehaviour
 {
+    [Range(0.01f, 100f)]
     [SerializeField] private float sphereRadius = 5f;
 
     public float SphereRadius => sphereRadius;

@@ -392,7 +392,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 715519453}
-  - component: {fileID: 715519452}
   - component: {fileID: 715519454}
   - component: {fileID: 715519455}
   m_Layer: 0
@@ -402,34 +401,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &715519452
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 715519451}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ac2fc34e4f0e1724881cd452b40e16df, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::DensityField
-  fieldMode: 0
-  resolution: 16
-  spacing: 1
-  fieldOffset:
-    x: 0
-    y: 0
-    z: 0
-  generator: {fileID: 715519454}
-  terrainGenerator: {fileID: 715519455}
-  refreshRate: 0.3
-  gizmoMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
-  gizmoMaterial: {fileID: 2100000, guid: 6365b0597384f5e4a844af22fc4f9d70, type: 2}
-  gizmoSize: 0.1
-  gizmoAlpha: 1
-  surfaceMaterial: {fileID: 2100000, guid: 62ba023819385684ca70fd0a5e62518e, type: 2}
-  editorGizmoRadius: 0.05
 --- !u!4 &715519453
 Transform:
   m_ObjectHideFlags: 0
@@ -472,7 +443,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TerrainDensityFieldGenerator
   baseHeight: 0
   amplitude: 2
-  frequency: 0.15
+  noise:
+    noiseType: 2
+    frequency: 0.08
+    octaves: 5
+    lacunarity: 2
+    persistence: 0.5
+    seed: 1
+    offset:
+      x: 0
+      y: 0
 --- !u!1 &832575517
 GameObject:
   m_ObjectHideFlags: 0
@@ -522,6 +502,66 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1566601343
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1566601345}
+  - component: {fileID: 1566601344}
+  m_Layer: 0
+  m_Name: Density Field
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1566601344
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1566601343}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ac2fc34e4f0e1724881cd452b40e16df, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DensityField
+  fieldMode: 0
+  resolution: 16
+  spacing: 1
+  fieldOffset:
+    x: 0
+    y: 0
+    z: 0
+  generator: {fileID: 715519454}
+  terrainGenerator: {fileID: 715519455}
+  refreshRate: 0.3
+  gizmoMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+  gizmoMaterial: {fileID: 2100000, guid: 6365b0597384f5e4a844af22fc4f9d70, type: 2}
+  gizmoSize: 0.1
+  gizmoAlpha: 1
+  surfaceMaterial: {fileID: 2100000, guid: 62ba023819385684ca70fd0a5e62518e, type: 2}
+  editorGizmoRadius: 0.05
+--- !u!4 &1566601345
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1566601343}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -529,4 +569,5 @@ SceneRoots:
   - {fileID: 330585546}
   - {fileID: 410087041}
   - {fileID: 832575519}
+  - {fileID: 1566601345}
   - {fileID: 715519453}

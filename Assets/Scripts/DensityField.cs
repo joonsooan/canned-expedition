@@ -19,24 +19,40 @@ public class DensityField : MonoBehaviour
     private const float IsoValue = 0f;
 
     [Header("Field")]
+    [Tooltip("Sphere SDF 또는 Terrain 노이즈 높이 필드")]
     [SerializeField] private DensityFieldMode fieldMode = DensityFieldMode.Sphere;
+    [Tooltip("격자 한 변의 샘플 수")]
+    [Range(2, 128)]
     [SerializeField] private int resolution = 16;
+    [Tooltip("셀 간격 (월드 단위)")]
+    [Range(0.01f, 20f)]
     [SerializeField] private float spacing = 1f;
+    [Tooltip("필드 원점 오프셋")]
     [SerializeField] private float3 fieldOffset;
+    [Tooltip("Field Mode가 Sphere일 때 사용")]
     [SerializeField] private SphereDensityFieldGenerator generator;
+    [Tooltip("Field Mode가 Terrain일 때 사용")]
     [SerializeField] private TerrainDensityFieldGenerator terrainGenerator;
+    [Tooltip("밀도·메시 갱신 최소 간격(초)")]
+    [Range(0.02f, 5f)]
     [SerializeField] private float refreshRate = 0.3f;
 
     [Header("GPU Gizmo")]
+    [SerializeField] private bool drawDensityGizmo = true;
     [SerializeField] private Mesh gizmoMesh;
     [SerializeField] private Material gizmoMaterial;
+    [Range(0.001f, 2f)]
     [SerializeField] private float gizmoSize = 0.1f;
+    [Range(0f, 1f)]
     [SerializeField] private float gizmoAlpha = 1f;
 
     [Header("Iso surface")]
+    [Tooltip("마칭 큐브 등값면에 Graphics.DrawMesh로 사용할 머티리얼")]
     [SerializeField] private Material surfaceMaterial;
 
     [Header("Editor")]
+    [Tooltip("씬 뷰 밀도 포인트 기즈모 반경")]
+    [Range(0.001f, 1f)]
     [SerializeField] private float editorGizmoRadius = 0.05f;
 
     private FieldData[] fieldData;
@@ -78,7 +94,8 @@ public class DensityField : MonoBehaviour
 
         timer += Time.deltaTime;
 
-        if (gizmoBuffer != null && argsBuffer != null && gizmoMesh != null && gizmoMaterial != null)
+        if (drawDensityGizmo && gizmoBuffer != null && argsBuffer != null && gizmoMesh != null &&
+            gizmoMaterial != null)
         {
             gizmoMaterial.SetFloat("_Size", gizmoSize);
             gizmoMaterial.SetFloat("_Alpha", gizmoAlpha);
@@ -185,7 +202,7 @@ public class DensityField : MonoBehaviour
 
     private void OnDrawGizmos()
     {
-        if (fieldData == null) return;
+        if (!drawDensityGizmo || fieldData == null) return;
 
         for (int i = 0; i < fieldData.Length; i++)
         {
