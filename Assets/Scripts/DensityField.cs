@@ -221,6 +221,9 @@ public class DensityField : MonoBehaviour
 
     private void RefreshFieldContents()
     {
+        brushes.Clear();
+        pendingBrushes.Clear();
+
         float3 origin = InitializeFieldAndDensity();
         ApplyGenerator(origin);
         ApplyBrushes();

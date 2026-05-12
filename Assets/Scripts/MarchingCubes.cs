@@ -48,7 +48,9 @@ public static class MarchingCubes
         if (math.any(maxCell <= minCell))
             return;
 
-        var edgePoints = new Vector3[12];
+        var edgeVertexCache = new Dictionary<long, int>();
+        var cornerIndices = new int[8];
+        var edgeIndices = new int[12];
 
         for (int z = minCell.z; z < maxCell.z; z++)
         {
@@ -56,42 +58,24 @@ public static class MarchingCubes
             {
                 for (int x = minCell.x; x < maxCell.x; x++)
                 {
-                    int i0 = Index(resolution, x, y, z);
-                    int i1 = Index(resolution, x + 1, y, z);
-                    int i2 = Index(resolution, x + 1, y + 1, z);
-                    int i3 = Index(resolution, x, y + 1, z);
-                    int i4 = Index(resolution, x, y, z + 1);
-                    int i5 = Index(resolution, x + 1, y, z + 1);
-                    int i6 = Index(resolution, x + 1, y + 1, z + 1);
-                    int i7 = Index(resolution, x, y + 1, z + 1);
-
-                    float d0 = data[i0].density;
-                    float d1 = data[i1].density;
-                    float d2 = data[i2].density;
-                    float d3 = data[i3].density;
-                    float d4 = data[i4].density;
-                    float d5 = data[i5].density;
-                    float d6 = data[i6].density;
-                    float d7 = data[i7].density;
-
-                    float3 p0 = data[i0].position;
-                    float3 p1 = data[i1].position;
-                    float3 p2 = data[i2].position;
-                    float3 p3 = data[i3].position;
-                    float3 p4 = data[i4].position;
-                    float3 p5 = data[i5].position;
-                    float3 p6 = data[i6].position;
-                    float3 p7 = data[i7].position;
+                    cornerIndices[0] = Index(resolution, x, y, z);
+                    cornerIndices[1] = Index(resolution, x + 1, y, z);
+                    cornerIndices[2] = Index(resolution, x + 1, y + 1, z);
+                    cornerIndices[3] = Index(resolution, x, y + 1, z);
+                    cornerIndices[4] = Index(resolution, x, y, z + 1);
+                    cornerIndices[5] = Index(resolution, x + 1, y, z + 1);
+                    cornerIndices[6] = Index(resolution, x + 1, y + 1, z + 1);
+                    cornerIndices[7] = Index(resolution, x, y + 1, z + 1);
 
                     int cubeIndex = 0;
-                    if (d0 <= isovalue) cubeIndex |= 1;
-                    if (d1 <= isovalue) cubeIndex |= 2;
-                    if (d2 <= isovalue) cubeIndex |= 4;
-                    if (d3 <= isovalue) cubeIndex |= 8;
-                    if (d4 <= isovalue) cubeIndex |= 16;
-                    if (d5 <= isovalue) cubeIndex |= 32;
-                    if (d6 <= isovalue) cubeIndex |= 64;
-                    if (d7 <= isovalue) cubeIndex |= 128;
+                    if (data[cornerIndices[0]].density <= isovalue) cubeIndex |= 1;
+                    if (data[cornerIndices[1]].density <= isovalue) cubeIndex |= 2;
+                    if (data[cornerIndices[2]].density <= isovalue) cubeIndex |= 4;
+                    if (data[cornerIndices[3]].density <= isovalue) cubeIndex |= 8;
+                    if (data[cornerIndices[4]].density <= isovalue) cubeIndex |= 16;
+                    if (data[cornerIndices[5]].density <= isovalue) cubeIndex |= 32;
+                    if (data[cornerIndices[6]].density <= isovalue) cubeIndex |= 64;
+                    if (data[cornerIndices[7]].density <= isovalue) cubeIndex |= 128;
 
                     int edgeMask = LookupTable.edgeTable[cubeIndex];
                     if (edgeMask == 0)
@@ -102,37 +86,20 @@ public static class MarchingCubes
                         if ((edgeMask & (1 << e)) == 0)
                             continue;
 
-                        int a = EdgeVertices[e, 0];
-                        int b = EdgeVertices[e, 1];
-                        float3 va = default;
-                        float3 vb = default;
-                        float da = 0f;
-                        float db = 0f;
-                        switch (a)
+                        int ca = cornerIndices[EdgeVertices[e, 0]];
+                        int cb = cornerIndices[EdgeVertices[e, 1]];
+                        long key = EdgeKey(ca, cb);
+
+                        if (!edgeVertexCache.TryGetValue(key, out int vertIndex))
                         {
-                            case 0: va = p0; da = d0; break;
-                            case 1: va = p1; da = d1; break;
-                            case 2: va = p2; da = d2; break;
-                            case 3: va = p3; da = d3; break;
-                            case 4: va = p4; da = d4; break;
-                            case 5: va = p5; da = d5; break;
-                            case 6: va = p6; da = d6; break;
-                            case 7: va = p7; da = d7; break;
+                            FieldData fda = data[ca];
+                            FieldData fdb = data[cb];
+                            vertIndex = verts.Count;
+                            verts.Add(VertexInterp(isovalue, fda.position, fdb.position, fda.density, fdb.density));
+                            edgeVertexCache[key] = vertIndex;
                         }
 
-                        switch (b)
-                        {
-                            case 0: vb = p0; db = d0; break;
-                            case 1: vb = p1; db = d1; break;
-                            case 2: vb = p2; db = d2; break;
-                            case 3: vb = p3; db = d3; break;
-                            case 4: vb = p4; db = d4; break;
-                            case 5: vb = p5; db = d5; break;
-                            case 6: vb = p6; db = d6; break;
-                            case 7: vb = p7; db = d7; break;
-                        }
-
-                        edgePoints[e] = VertexInterp(isovalue, va, vb, da, db);
+                        edgeIndices[e] = vertIndex;
                     }
 
                     for (int t = 0; t < 16; t += 3)
@@ -144,13 +111,9 @@ public static class MarchingCubes
                         int e1 = LookupTable.triangleTable[cubeIndex, t + 1];
                         int e2 = LookupTable.triangleTable[cubeIndex, t + 2];
 
-                        int start = verts.Count;
-                        verts.Add(edgePoints[e0]);
-                        verts.Add(edgePoints[e1]);
-                        verts.Add(edgePoints[e2]);
-                        indices.Add(start);
-                        indices.Add(start + 2);
-                        indices.Add(start + 1);
+                        indices.Add(edgeIndices[e0]);
+                        indices.Add(edgeIndices[e2]);
+                        indices.Add(edgeIndices[e1]);
                     }
                 }
             }
@@ -173,6 +136,12 @@ public static class MarchingCubes
     private static int Index(int resolution, int x, int y, int z)
     {
         return x + resolution * y + resolution * resolution * z;
+    }
+
+    private static long EdgeKey(int a, int b)
+    {
+        if (a > b) { int t = a; a = b; b = t; }
+        return ((long)a << 32) | (uint)b;
     }
 
     private static Vector3 VertexInterp(float isolevel, float3 p1, float3 p2, float valp1, float valp2)
