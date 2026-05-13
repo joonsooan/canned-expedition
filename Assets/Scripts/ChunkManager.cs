@@ -5,8 +5,9 @@ using UnityEngine;
 public class ChunkManager
 {
     private const int ChunkSize = 8;
-    private const int LoadRadiusInChunks = 1;
     private const float IsoValue = 0f;
+
+    private int loadRadius = 3;
 
     private struct ChunkCoord
     {
@@ -66,26 +67,33 @@ public class ChunkManager
     private float3 worldOrigin;
     private Mesh isoSurfaceMesh;
     private Transform chunkLoadTarget;
-    private Transform fallbackChunkLoadTarget;
     private int chunkCountPerAxis = 1;
     private int defaultAppliedBrushCount;
     private bool hasTargetChunk;
     private ChunkCoord lastTargetChunk;
 
-    public void Initialize(FieldData[] data, int fieldResolution, float fieldSpacing, float3 origin, Mesh mesh, Transform fallbackTarget)
+    public void Initialize(FieldData[] data, int fieldResolution, float fieldSpacing, float3 origin, Mesh mesh)
     {
         fieldData = data;
         resolution = fieldResolution;
         spacing = fieldSpacing;
         worldOrigin = origin;
         isoSurfaceMesh = mesh;
-        fallbackChunkLoadTarget = fallbackTarget;
         ResetChunks();
     }
 
     public void SetLoadTarget(Transform target)
     {
         chunkLoadTarget = target;
+        hasTargetChunk = false;
+    }
+
+    public void SetLoadRadius(int radius)
+    {
+        int clamped = math.max(1, radius);
+        if (loadRadius == clamped)
+            return;
+        loadRadius = clamped;
         hasTargetChunk = false;
     }
 
@@ -113,14 +121,16 @@ public class ChunkManager
         lastTargetChunk = targetChunk;
 
         var desired = new HashSet<ChunkCoord>();
-        int minX = math.max(0, targetChunk.x - LoadRadiusInChunks);
-        int maxX = math.min(chunkCountPerAxis - 1, targetChunk.x + LoadRadiusInChunks);
-        int minZ = math.max(0, targetChunk.z - LoadRadiusInChunks);
-        int maxZ = math.min(chunkCountPerAxis - 1, targetChunk.z + LoadRadiusInChunks);
+        int minX = math.max(0, targetChunk.x - loadRadius);
+        int maxX = math.min(chunkCountPerAxis - 1, targetChunk.x + loadRadius);
+        int minY = math.max(0, targetChunk.y - loadRadius);
+        int maxY = math.min(chunkCountPerAxis - 1, targetChunk.y + loadRadius);
+        int minZ = math.max(0, targetChunk.z - loadRadius);
+        int maxZ = math.min(chunkCountPerAxis - 1, targetChunk.z + loadRadius);
 
         for (int z = minZ; z <= maxZ; z++)
         {
-            for (int y = 0; y < chunkCountPerAxis; y++)
+            for (int y = minY; y <= maxY; y++)
             {
                 for (int x = minX; x <= maxX; x++)
                 {
@@ -265,13 +275,8 @@ public class ChunkManager
         if (chunkLoadTarget != null)
             return chunkLoadTarget;
 
-        if (fallbackChunkLoadTarget == null)
-        {
-            Camera mainCamera = Camera.main;
-            fallbackChunkLoadTarget = mainCamera != null ? mainCamera.transform : null;
-        }
-
-        return fallbackChunkLoadTarget;
+        Camera mainCamera = Camera.main;
+        return mainCamera != null ? mainCamera.transform : null;
     }
 
     private ChunkCoord GetTargetChunkCoord()

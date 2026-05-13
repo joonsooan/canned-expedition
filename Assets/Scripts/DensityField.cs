@@ -23,6 +23,11 @@ public class DensityField : MonoBehaviour
     private readonly List<BrushData> pendingBrushes = new List<BrushData>();
     private readonly ChunkManager chunkManager = new ChunkManager();
 
+    [Header("Chunk Rendering")]
+    [SerializeField] private Transform chunkTarget;
+    [Range(1, 16)]
+    [SerializeField] private int chunkRenderDistance = 3;
+
     [Header("Field")]
     [SerializeField] private DensityFieldMode fieldMode = DensityFieldMode.Sphere;
     [Tooltip("격자 한 변의 샘플 수")]
@@ -109,6 +114,8 @@ public class DensityField : MonoBehaviour
 
     private void Start()
     {
+        if (chunkTarget != null)
+            chunkManager.SetLoadTarget(chunkTarget);
         InitializeField();
         InitializeGizmo();
     }
@@ -116,6 +123,11 @@ public class DensityField : MonoBehaviour
     private void OnValidate()
     {
         SubscribeGeneratorChanges();
+        chunkManager.SetLoadRadius(chunkRenderDistance);
+
+        int minResolution = (2 * chunkRenderDistance + 1) * 8 + 1;
+        if (resolution < minResolution)
+            Debug.LogWarning($"[DensityField] resolution({resolution})이 너무 작습니다.");
     }
 
     private void Update()
@@ -167,7 +179,8 @@ public class DensityField : MonoBehaviour
     {
         timer = 0f;
         fieldData = new FieldData[resolution * resolution * resolution];
-        chunkManager.Initialize(fieldData, resolution, spacing, WorldOrigin, isoSurfaceMesh, transform);
+        chunkManager.Initialize(fieldData, resolution, spacing, WorldOrigin, isoSurfaceMesh);
+        chunkManager.SetLoadRadius(chunkRenderDistance);
         RefreshFieldContents();
         isDirty = false;
     }
@@ -230,7 +243,8 @@ public class DensityField : MonoBehaviour
         pendingBrushes.Clear();
         requiresFullRefresh = false;
 
-        chunkManager.Initialize(fieldData, resolution, spacing, origin, isoSurfaceMesh, transform);
+        chunkManager.Initialize(fieldData, resolution, spacing, origin, isoSurfaceMesh);
+        chunkManager.SetLoadRadius(chunkRenderDistance);
         chunkManager.RebuildForFullField(brushes);
         SyncSurfaceCollider();
         UpdateBounds();

@@ -138,7 +138,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!135 &82101334
 SphereCollider:
   m_ObjectHideFlags: 0
@@ -347,7 +347,7 @@ Transform:
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1, z: -20}
+  m_LocalPosition: {x: 0, y: 3, z: -20}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -604,11 +604,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 657bef43d9828a34f837f5acfca07d9a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TerrainDensityFieldGenerator
-  baseHeight: 0
-  amplitude: 5
+  baseHeight: 2
+  amplitude: 4
   noise:
     noiseType: 1
-    frequency: 0.25
+    frequency: 0.15
     octaves: 5
     lacunarity: 2
     persistence: 0.5
@@ -746,8 +746,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ac2fc34e4f0e1724881cd452b40e16df, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DensityField
+  chunkTarget: {fileID: 330585546}
+  chunkRenderDistance: 2
   fieldMode: 1
-  resolution: 16
+  resolution: 64
   spacing: 1
   fieldOffset:
     x: 0
