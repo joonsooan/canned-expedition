@@ -12,27 +12,43 @@ public class SdfMouseBrush : MonoBehaviour
     [SerializeField] private float brushRadius = 0.5f;
     [SerializeField] private float brushStrength = 0.5f;
 
+    [Header("Brush Object")]
+    [SerializeField] private GameObject brushObject;
+    [SerializeField] private Color addColor = Color.green;
+    [SerializeField] private Color subtractColor = Color.red;
+
     private bool hasLastBrush;
     private float3 lastBrushPosition;
     private BrushType lastBrushType;
+    private Renderer brushRenderer;
+
+    private void Start()
+    {
+        brushRenderer = brushObject.GetComponentInChildren<Renderer>();
+    }
 
     private void Update()
     {
         if (mainCamera == null || densityField == null)
+        {
+            SetIndicatorActive(false);
             return;
+        }
+
+        bool hasHit = TryGetWorldPos(out float3 worldPos);
 
         bool addPressed = Input.GetMouseButton(0);
         bool subtractPressed = Input.GetMouseButton(1);
-        if (!addPressed && !subtractPressed)
+        BrushType brushType = subtractPressed ? BrushType.Subtract : BrushType.Add;
+
+        UpdateIndicator(hasHit, worldPos, brushType);
+
+        if (!hasHit || (!addPressed && !subtractPressed))
         {
             hasLastBrush = false;
             return;
         }
 
-        if (!TryGetWorldPos(out float3 worldPos))
-            return;
-
-        BrushType brushType = addPressed ? BrushType.Add : BrushType.Subtract;
         if (!ShouldPlaceBrush(worldPos, brushType))
             return;
 
@@ -40,6 +56,24 @@ public class SdfMouseBrush : MonoBehaviour
         lastBrushPosition = worldPos;
         lastBrushType = brushType;
         hasLastBrush = true;
+    }
+
+    private void UpdateIndicator(bool visible, float3 worldPos, BrushType brushType)
+    {
+        SetIndicatorActive(visible);
+        if (!visible || brushObject == null) return;
+
+        brushObject.transform.position = worldPos;
+        brushObject.transform.localScale = Vector3.one * (brushRadius * 2f);
+
+        if (brushRenderer != null)
+            brushRenderer.material.color = brushType == BrushType.Add ? addColor : subtractColor;
+    }
+
+    private void SetIndicatorActive(bool active)
+    {
+        if (brushObject != null && brushObject.activeSelf != active)
+            brushObject.SetActive(active);
     }
 
     private bool ShouldPlaceBrush(float3 worldPos, BrushType brushType)

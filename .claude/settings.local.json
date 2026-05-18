@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Unity Projects\\\\canned-expedition\" -Directory)",
+      "Bash(Select-Object Name)"
+    ]
+  }
+}
