@@ -27,7 +27,7 @@ public class DensityField : MonoBehaviour
     [Header("Field")]
     [SerializeField] private DensityFieldMode fieldMode = DensityFieldMode.Sphere;
     [Tooltip("격자 한 변의 샘플 수")]
-    [Range(2, 256)]
+    [Range(2, 1024)]
     [SerializeField] private int resolution = 16;
     [Tooltip("셀 간격 (월드 단위)")]
     [Range(0.01f, 20f)]
@@ -48,7 +48,7 @@ public class DensityField : MonoBehaviour
     [Range(0f, 1f)]
     [SerializeField] private float gizmoAlpha = 1f;
 
-    [Header("Iso surface")]
+    [Header("Surface")]
     [SerializeField] private Material surfaceMaterial;
     [SerializeField] private MeshCollider surfaceCollider;
 
