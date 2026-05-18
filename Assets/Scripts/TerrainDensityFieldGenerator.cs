@@ -1,3 +1,6 @@
+using Unity.Burst;
+using Unity.Collections;
+using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -14,21 +17,40 @@ public class TerrainDensityFieldGenerator : MonoBehaviour
 
     public event System.Action Changed;
 
-    public void Apply(FieldData[] data, float3 sdfCenter)
+    [BurstCompile]
+    private struct SampleHeightJob : IJobParallelFor
     {
-        float amp = amplitude;
-        float bh = baseHeight;
-        TerrainNoiseConfig cfg = noise;
+        public NativeArray<FieldData> data;
+        public float3 sdfCenter;
+        public float amplitude;
+        public float baseHeight;
+        public TerrainNoiseConfig config;
 
-        for (int i = 0; i < data.Length; i++)
+        public void Execute(int i)
         {
             FieldData fd = data[i];
             float3 pRel = fd.position - sdfCenter;
-            float n = TerrainNoiseSampler.SampleHeight(pRel.xz, cfg);
-            float h = amp * n + bh;
-            fd.density = pRel.y - h;
+            float n = TerrainNoiseSampler.SampleHeight(pRel.xz, config);
+            fd.density = pRel.y - amplitude * n - baseHeight;
             data[i] = fd;
         }
+    }
+
+    public void Apply(FieldData[] data, float3 sdfCenter)
+    {
+        var native = new NativeArray<FieldData>(data, Allocator.TempJob);
+
+        new SampleHeightJob
+        {
+            data = native,
+            sdfCenter = sdfCenter,
+            amplitude = amplitude,
+            baseHeight = baseHeight,
+            config = noise
+        }.Schedule(data.Length, 64).Complete();
+
+        native.CopyTo(data);
+        native.Dispose();
     }
 
     private void OnValidate()

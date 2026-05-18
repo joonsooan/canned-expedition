@@ -1,4 +1,7 @@
 using System.Collections.Generic;
+using Unity.Burst;
+using Unity.Collections;
+using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -6,7 +9,7 @@ public class ChunkManager
 {
     private const int ChunkSize = 8;
     private const float IsoValue = 0f;
-
+    private const int MaxNewChunksPerFrame = 4;
     private int loadRadius = 3;
 
     private struct ChunkCoord
@@ -51,13 +54,32 @@ public class ChunkManager
         public readonly List<Vector3> vertices = new List<Vector3>(1024);
         public readonly List<int> indices = new List<int>(1536);
         public bool dirty;
-        public bool brushDirty;
+    }
+
+    [BurstCompile]
+    private struct ApplyBrushesJob : IJobParallelFor
+    {
+        [ReadOnly] public NativeArray<int> sampleIndices;
+        [ReadOnly] public NativeArray<BrushData> brushes;
+        [NativeDisableParallelForRestriction] public NativeArray<FieldData> fieldData;
+        public int startBrush;
+        public int endBrush;
+
+        public void Execute(int i)
+        {
+            int idx = sampleIndices[i];
+            FieldData fd = fieldData[idx];
+            float density = fd.density;
+            for (int b = startBrush; b < endBrush; b++)
+                density = SdfBrush.Apply(density, fd.position, brushes[b]);
+            fd.density = density;
+            fieldData[idx] = fd;
+        }
     }
 
     private readonly Dictionary<ChunkCoord, ChunkData> activeChunks = new Dictionary<ChunkCoord, ChunkData>();
     private readonly List<Vector3> combinedVertices = new List<Vector3>(4096);
     private readonly List<int> combinedIndices = new List<int>(6144);
-    private readonly HashSet<int> updatedSampleIndices = new HashSet<int>();
     private readonly List<ChunkCoord> coordsToRemove = new List<ChunkCoord>();
     private readonly Dictionary<ChunkCoord, int> appliedBrushCounts = new Dictionary<ChunkCoord, int>();
 
@@ -71,6 +93,7 @@ public class ChunkManager
     private int defaultAppliedBrushCount;
     private bool hasTargetChunk;
     private ChunkCoord lastTargetChunk;
+    private bool hasPendingChunkLoads;
 
     public void Initialize(FieldData[] data, int fieldResolution, float fieldSpacing, float3 origin, Mesh mesh)
     {
@@ -111,11 +134,11 @@ public class ChunkManager
             return false;
 
         ChunkCoord targetChunk = GetTargetChunkCoord();
-        if (!force && hasTargetChunk && lastTargetChunk.Equals(targetChunk))
+        if (!force && !hasPendingChunkLoads && hasTargetChunk && lastTargetChunk.Equals(targetChunk))
             return false;
 
         if (!force && pendingBrushes != null && pendingBrushes.Count > 0 && hasTargetChunk)
-            RefreshPendingBrushes(brushes, pendingBrushes);
+            RefreshPendingBrushes(brushes);
 
         hasTargetChunk = true;
         lastTargetChunk = targetChunk;
@@ -152,22 +175,29 @@ public class ChunkManager
             activeChunks.Remove(coordsToRemove[i]);
         }
 
+        hasPendingChunkLoads = false;
+        int newChunksThisFrame = 0;
         foreach (var coord in desired)
         {
             if (activeChunks.ContainsKey(coord))
                 continue;
 
+            if (newChunksThisFrame >= MaxNewChunksPerFrame)
+            {
+                hasPendingChunkLoads = true;
+                changed = true;
+                continue;
+            }
+
             activeChunks.Add(coord, CreateChunk(coord));
+            newChunksThisFrame++;
             changed = true;
         }
 
         if (force)
         {
             foreach (var chunk in activeChunks.Values)
-            {
                 chunk.dirty = true;
-                chunk.brushDirty = false;
-            }
         }
 
         if (!changed)
@@ -199,7 +229,6 @@ public class ChunkManager
                         continue;
 
                     chunk.dirty = true;
-                    chunk.brushDirty = true;
                     markedAny = true;
                 }
             }
@@ -208,16 +237,11 @@ public class ChunkManager
         return markedAny;
     }
 
-    public bool RefreshPendingBrushes(List<BrushData> brushes, List<BrushData> pendingBrushes)
+    public void RefreshPendingBrushes(List<BrushData> brushes)
     {
-        if (pendingBrushes == null || pendingBrushes.Count == 0)
-            return false;
-
-        ApplyPendingBrushesToDirtyChunks(brushes, pendingBrushes);
         ApplyMissingBrushesToDirtyChunks(brushes);
         RebuildDirtyChunks();
         RebuildCombinedMesh();
-        return true;
     }
 
     public bool TryGetChunkBounds(float3 worldPosition, out Bounds bounds)
@@ -251,6 +275,7 @@ public class ChunkManager
         int cellCount = math.max(1, resolution - 1);
         chunkCountPerAxis = math.max(1, (cellCount + ChunkSize - 1) / ChunkSize);
         hasTargetChunk = false;
+        hasPendingChunkLoads = false;
     }
 
     private ChunkData CreateChunk(ChunkCoord coord)
@@ -265,8 +290,7 @@ public class ChunkManager
             coord = coord,
             minCell = minCell,
             maxCell = maxCellExclusive,
-            dirty = true,
-            brushDirty = false
+            dirty = true
         };
     }
 
@@ -325,103 +349,74 @@ public class ChunkManager
         return true;
     }
 
-    private void ApplyPendingBrushesToDirtyChunks(List<BrushData> brushes, List<BrushData> pendingBrushes)
-    {
-        updatedSampleIndices.Clear();
-
-        foreach (var chunk in activeChunks.Values)
-        {
-            if (!chunk.brushDirty)
-                continue;
-
-            ApplyBrushesToChunkSamples(chunk, pendingBrushes);
-            chunk.brushDirty = false;
-            appliedBrushCounts[chunk.coord] = brushes.Count;
-        }
-    }
-
     private void ApplyMissingBrushesToDirtyChunks(List<BrushData> brushes)
     {
-        if (brushes == null || brushes.Count == 0)
-            return;
+        if (brushes == null || brushes.Count == 0) return;
 
-        updatedSampleIndices.Clear();
+        bool anyDirty = false;
+        foreach (var chunk in activeChunks.Values)
+        {
+            if (!chunk.dirty) continue;
+            if (GetAppliedBrushCount(chunk.coord) < brushes.Count) { anyDirty = true; break; }
+        }
+        if (!anyDirty) return;
+
+        var nativeBrushes = ListToNativeArray(brushes, Allocator.TempJob);
+        var nativeField = new NativeArray<FieldData>(fieldData, Allocator.TempJob);
 
         foreach (var chunk in activeChunks.Values)
         {
-            if (!chunk.dirty)
-                continue;
-
+            if (!chunk.dirty) continue;
             int appliedCount = GetAppliedBrushCount(chunk.coord);
-            if (appliedCount >= brushes.Count)
-                continue;
-
-            ApplyBrushRangeToChunkSamples(chunk, brushes, appliedCount, brushes.Count);
+            if (appliedCount >= brushes.Count) continue;
+            RunBrushJobForChunk(chunk, nativeField, nativeBrushes, appliedCount, brushes.Count);
             appliedBrushCounts[chunk.coord] = brushes.Count;
         }
+
+        nativeField.CopyTo(fieldData);
+        nativeField.Dispose();
+        nativeBrushes.Dispose();
+    }
+
+    private void RunBrushJobForChunk(ChunkData chunk, NativeArray<FieldData> nativeField, NativeArray<BrushData> nativeBrushes, int startBrush, int endBrush)
+    {
+        var indices = BuildChunkSampleIndices(chunk, Allocator.TempJob);
+        new ApplyBrushesJob
+        {
+            sampleIndices = indices,
+            brushes = nativeBrushes,
+            fieldData = nativeField,
+            startBrush = startBrush,
+            endBrush = endBrush
+        }.Schedule(indices.Length, 64).Complete();
+        indices.Dispose();
+    }
+
+    private NativeArray<int> BuildChunkSampleIndices(ChunkData chunk, Allocator allocator)
+    {
+        int sampleMax = resolution - 1;
+        int3 min = math.clamp(chunk.minCell, int3.zero, new int3(sampleMax, sampleMax, sampleMax));
+        int3 max = math.clamp(chunk.maxCell, int3.zero, new int3(sampleMax, sampleMax, sampleMax));
+        int3 size = max - min + new int3(1, 1, 1);
+        var indices = new NativeArray<int>(size.x * size.y * size.z, allocator, NativeArrayOptions.UninitializedMemory);
+        int i = 0;
+        for (int z = min.z; z <= max.z; z++)
+            for (int y = min.y; y <= max.y; y++)
+                for (int x = min.x; x <= max.x; x++)
+                    indices[i++] = GetIndex(x, y, z);
+        return indices;
+    }
+
+    private static NativeArray<T> ListToNativeArray<T>(List<T> list, Allocator allocator) where T : struct
+    {
+        var arr = new NativeArray<T>(list.Count, allocator, NativeArrayOptions.UninitializedMemory);
+        for (int i = 0; i < list.Count; i++) arr[i] = list[i];
+        return arr;
     }
 
     private int GetAppliedBrushCount(ChunkCoord coord)
     {
         return appliedBrushCounts.TryGetValue(coord, out int count) ? count : defaultAppliedBrushCount;
-    }
-
-    private void ApplyBrushRangeToChunkSamples(ChunkData chunk, List<BrushData> brushes, int startIndex, int endIndex)
-    {
-        int sampleMax = resolution - 1;
-        int3 min = math.clamp(chunk.minCell, int3.zero, new int3(sampleMax, sampleMax, sampleMax));
-        int3 max = math.clamp(chunk.maxCell, int3.zero, new int3(sampleMax, sampleMax, sampleMax));
-
-        for (int z = min.z; z <= max.z; z++)
-        {
-            for (int y = min.y; y <= max.y; y++)
-            {
-                for (int x = min.x; x <= max.x; x++)
-                {
-                    int index = GetIndex(x, y, z);
-                    if (!updatedSampleIndices.Add(index))
-                        continue;
-
-                    FieldData fd = fieldData[index];
-                    float density = fd.density;
-                    for (int i = startIndex; i < endIndex; i++)
-                    {
-                        density = SdfBrush.Apply(density, fd.position, brushes[i]);
-                    }
-                    fd.density = density;
-                    fieldData[index] = fd;
-                }
-            }
-        }
-    }
-
-    private void ApplyBrushesToChunkSamples(ChunkData chunk, List<BrushData> source)
-    {
-        int sampleMax = resolution - 1;
-        int3 min = math.clamp(chunk.minCell, int3.zero, new int3(sampleMax, sampleMax, sampleMax));
-        int3 max = math.clamp(chunk.maxCell, int3.zero, new int3(sampleMax, sampleMax, sampleMax));
-
-        for (int z = min.z; z <= max.z; z++)
-        {
-            for (int y = min.y; y <= max.y; y++)
-            {
-                for (int x = min.x; x <= max.x; x++)
-                {
-                    int index = GetIndex(x, y, z);
-                    if (!updatedSampleIndices.Add(index))
-                        continue;
-
-                    FieldData fd = fieldData[index];
-                    float density = fd.density;
-                    foreach (var brush in source)
-                    {
-                        density = SdfBrush.Apply(density, fd.position, brush);
-                    }
-                    fd.density = density;
-                    fieldData[index] = fd;
-                }
-            }
-        }
     }
 
     private void RebuildDirtyChunks()

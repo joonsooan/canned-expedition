@@ -747,7 +747,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DensityField
   chunkTarget: {fileID: 330585546}
-  chunkRenderDistance: 2
+  chunkRenderDistance: 3
   fieldMode: 1
   resolution: 64
   spacing: 1
@@ -757,7 +757,7 @@ MonoBehaviour:
     z: 0
   generator: {fileID: 715519454}
   terrainGenerator: {fileID: 715519455}
-  refreshRate: 0.1
+  refreshRate: 0.05
   drawDensityGizmo: 0
   gizmoMesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
   gizmoMaterial: {fileID: 2100000, guid: 6365b0597384f5e4a844af22fc4f9d70, type: 2}

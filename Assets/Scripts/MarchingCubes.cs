@@ -12,6 +12,23 @@ public static class MarchingCubes
         { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }
     };
 
+    private static readonly int[,] EdgeCacheOffsets =
+    {
+        { 0, 0, 0, 0 },
+        { 1, 0, 0, 1 },
+        { 0, 1, 0, 0 },
+        { 0, 0, 0, 1 },
+        { 0, 0, 1, 0 },
+        { 1, 0, 1, 1 },
+        { 0, 1, 1, 0 },
+        { 0, 0, 1, 1 },
+        { 0, 0, 0, 2 },
+        { 1, 0, 0, 2 },
+        { 1, 1, 0, 2 },
+        { 0, 1, 0, 2 },
+    };
+
+    private static int[] s_edgeCache = new int[2200];
     private const float Epsilon = 1e-6f;
 
     public static void BuildMesh(Mesh mesh, FieldData[] data, int resolution, float isovalue)
@@ -48,7 +65,22 @@ public static class MarchingCubes
         if (math.any(maxCell <= minCell))
             return;
 
-        var edgeVertexCache = new Dictionary<long, int>();
+        int numSamplesX = maxCell.x - minCell.x + 1;
+        int numSamplesY = maxCell.y - minCell.y + 1;
+        int numSamplesZ = maxCell.z - minCell.z + 1;
+        int cacheSize = numSamplesX * numSamplesY * numSamplesZ * 3;
+
+        int[] edgeCache;
+        if (cacheSize <= s_edgeCache.Length)
+        {
+            System.Array.Clear(s_edgeCache, 0, cacheSize);
+            edgeCache = s_edgeCache;
+        }
+        else
+        {
+            edgeCache = new int[cacheSize]; // zero-initialized by CLR
+        }
+
         var cornerIndices = new int[8];
         var edgeIndices = new int[12];
 
@@ -81,22 +113,36 @@ public static class MarchingCubes
                     if (edgeMask == 0)
                         continue;
 
+                    int lxBase = x - minCell.x;
+                    int lyBase = y - minCell.y;
+                    int lzBase = z - minCell.z;
+
                     for (int e = 0; e < 12; e++)
                     {
                         if ((edgeMask & (1 << e)) == 0)
                             continue;
 
-                        int ca = cornerIndices[EdgeVertices[e, 0]];
-                        int cb = cornerIndices[EdgeVertices[e, 1]];
-                        long key = EdgeKey(ca, cb);
+                        int lx = lxBase + EdgeCacheOffsets[e, 0];
+                        int ly = lyBase + EdgeCacheOffsets[e, 1];
+                        int lz = lzBase + EdgeCacheOffsets[e, 2];
+                        int dir = EdgeCacheOffsets[e, 3];
+                        int cacheIdx = (lz * numSamplesY + ly) * numSamplesX * 3 + lx * 3 + dir;
 
-                        if (!edgeVertexCache.TryGetValue(key, out int vertIndex))
+                        int stored = edgeCache[cacheIdx];
+                        int vertIndex;
+                        if (stored == 0)
                         {
+                            int ca = cornerIndices[EdgeVertices[e, 0]];
+                            int cb = cornerIndices[EdgeVertices[e, 1]];
                             FieldData fda = data[ca];
                             FieldData fdb = data[cb];
                             vertIndex = verts.Count;
                             verts.Add(VertexInterp(isovalue, fda.position, fdb.position, fda.density, fdb.density));
-                            edgeVertexCache[key] = vertIndex;
+                            edgeCache[cacheIdx] = vertIndex + 1;
+                        }
+                        else
+                        {
+                            vertIndex = stored - 1;
                         }
 
                         edgeIndices[e] = vertIndex;
@@ -136,12 +182,6 @@ public static class MarchingCubes
     private static int Index(int resolution, int x, int y, int z)
     {
         return x + resolution * y + resolution * resolution * z;
-    }
-
-    private static long EdgeKey(int a, int b)
-    {
-        if (a > b) { int t = a; a = b; b = t; }
-        return ((long)a << 32) | (uint)b;
     }
 
     private static Vector3 VertexInterp(float isolevel, float3 p1, float3 p2, float valp1, float valp2)

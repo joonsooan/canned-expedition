@@ -124,10 +124,6 @@ public class DensityField : MonoBehaviour
     {
         SubscribeGeneratorChanges();
         chunkManager.SetLoadRadius(chunkRenderDistance);
-
-        int minResolution = (2 * chunkRenderDistance + 1) * 8 + 1;
-        if (resolution < minResolution)
-            Debug.LogWarning($"[DensityField] resolution({resolution})이 너무 작습니다.");
     }
 
     private void Update()
@@ -254,7 +250,7 @@ public class DensityField : MonoBehaviour
     {
         if (pendingBrushes.Count == 0) return;
 
-        chunkManager.RefreshPendingBrushes(brushes, pendingBrushes);
+        chunkManager.RefreshPendingBrushes(brushes);
         pendingBrushes.Clear();
         SyncSurfaceCollider();
         UpdateBounds();
