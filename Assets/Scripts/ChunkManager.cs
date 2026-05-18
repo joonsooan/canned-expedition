@@ -82,6 +82,7 @@ public class ChunkManager
     private readonly List<int> combinedIndices = new List<int>(6144);
     private readonly List<ChunkCoord> coordsToRemove = new List<ChunkCoord>();
     private readonly Dictionary<ChunkCoord, int> appliedBrushCounts = new Dictionary<ChunkCoord, int>();
+    private readonly HashSet<ChunkCoord> desiredChunks = new HashSet<ChunkCoord>();
 
     private FieldData[] fieldData;
     private int resolution;
@@ -89,6 +90,7 @@ public class ChunkManager
     private float3 worldOrigin;
     private Mesh isoSurfaceMesh;
     private Transform chunkLoadTarget;
+    private Camera cachedMainCamera;
     private int chunkCountPerAxis = 1;
     private int defaultAppliedBrushCount;
     private bool hasTargetChunk;
@@ -143,41 +145,32 @@ public class ChunkManager
         hasTargetChunk = true;
         lastTargetChunk = targetChunk;
 
-        var desired = new HashSet<ChunkCoord>();
+        desiredChunks.Clear();
         int minX = math.max(0, targetChunk.x - loadRadius);
         int maxX = math.min(chunkCountPerAxis - 1, targetChunk.x + loadRadius);
         int minY = math.max(0, targetChunk.y - loadRadius);
         int maxY = math.min(chunkCountPerAxis - 1, targetChunk.y + loadRadius);
         int minZ = math.max(0, targetChunk.z - loadRadius);
         int maxZ = math.min(chunkCountPerAxis - 1, targetChunk.z + loadRadius);
-
         for (int z = minZ; z <= maxZ; z++)
-        {
             for (int y = minY; y <= maxY; y++)
-            {
                 for (int x = minX; x <= maxX; x++)
-                {
-                    desired.Add(new ChunkCoord(x, y, z));
-                }
-            }
-        }
+                    desiredChunks.Add(new ChunkCoord(x, y, z));
 
         coordsToRemove.Clear();
         foreach (var pair in activeChunks)
         {
-            if (!desired.Contains(pair.Key))
+            if (!desiredChunks.Contains(pair.Key))
                 coordsToRemove.Add(pair.Key);
         }
 
-        bool changed = force || coordsToRemove.Count > 0;
+        bool removedAny = coordsToRemove.Count > 0;
         for (int i = 0; i < coordsToRemove.Count; i++)
-        {
             activeChunks.Remove(coordsToRemove[i]);
-        }
 
         hasPendingChunkLoads = false;
         int newChunksThisFrame = 0;
-        foreach (var coord in desired)
+        foreach (var coord in desiredChunks)
         {
             if (activeChunks.ContainsKey(coord))
                 continue;
@@ -185,13 +178,11 @@ public class ChunkManager
             if (newChunksThisFrame >= MaxNewChunksPerFrame)
             {
                 hasPendingChunkLoads = true;
-                changed = true;
                 continue;
             }
 
             activeChunks.Add(coord, CreateChunk(coord));
             newChunksThisFrame++;
-            changed = true;
         }
 
         if (force)
@@ -200,11 +191,12 @@ public class ChunkManager
                 chunk.dirty = true;
         }
 
-        if (!changed)
+        // Only rebuild and return true if geometry actually changed
+        bool brushesApplied = ApplyMissingBrushesToDirtyChunks(brushes);
+        bool chunksRebuilt = RebuildDirtyChunks();
+        if (!brushesApplied && !chunksRebuilt && !removedAny)
             return false;
 
-        ApplyMissingBrushesToDirtyChunks(brushes);
-        RebuildDirtyChunks();
         RebuildCombinedMesh();
         return true;
     }
@@ -299,8 +291,9 @@ public class ChunkManager
         if (chunkLoadTarget != null)
             return chunkLoadTarget;
 
-        Camera mainCamera = Camera.main;
-        return mainCamera != null ? mainCamera.transform : null;
+        if (cachedMainCamera == null)
+            cachedMainCamera = Camera.main;
+        return cachedMainCamera != null ? cachedMainCamera.transform : null;
     }
 
     private ChunkCoord GetTargetChunkCoord()
@@ -349,9 +342,9 @@ public class ChunkManager
         return true;
     }
 
-    private void ApplyMissingBrushesToDirtyChunks(List<BrushData> brushes)
+    private bool ApplyMissingBrushesToDirtyChunks(List<BrushData> brushes)
     {
-        if (brushes == null || brushes.Count == 0) return;
+        if (brushes == null || brushes.Count == 0) return false;
 
         bool anyDirty = false;
         foreach (var chunk in activeChunks.Values)
@@ -359,7 +352,7 @@ public class ChunkManager
             if (!chunk.dirty) continue;
             if (GetAppliedBrushCount(chunk.coord) < brushes.Count) { anyDirty = true; break; }
         }
-        if (!anyDirty) return;
+        if (!anyDirty) return false;
 
         var nativeBrushes = ListToNativeArray(brushes, Allocator.TempJob);
         var nativeField = new NativeArray<FieldData>(fieldData, Allocator.TempJob);
@@ -376,6 +369,7 @@ public class ChunkManager
         nativeField.CopyTo(fieldData);
         nativeField.Dispose();
         nativeBrushes.Dispose();
+        return true;
     }
 
     private void RunBrushJobForChunk(ChunkData chunk, NativeArray<FieldData> nativeField, NativeArray<BrushData> nativeBrushes, int startBrush, int endBrush)
@@ -419,8 +413,9 @@ public class ChunkManager
         return appliedBrushCounts.TryGetValue(coord, out int count) ? count : defaultAppliedBrushCount;
     }
 
-    private void RebuildDirtyChunks()
+    private bool RebuildDirtyChunks()
     {
+        bool anyRebuilt = false;
         foreach (var chunk in activeChunks.Values)
         {
             if (!chunk.dirty)
@@ -430,7 +425,9 @@ public class ChunkManager
             chunk.indices.Clear();
             MarchingCubes.BuildMeshRange(fieldData, resolution, IsoValue, chunk.minCell, chunk.maxCell, chunk.vertices, chunk.indices);
             chunk.dirty = false;
+            anyRebuilt = true;
         }
+        return anyRebuilt;
     }
 
     private void RebuildCombinedMesh()

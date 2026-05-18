@@ -21,10 +21,20 @@ public class SdfMouseBrush : MonoBehaviour
     private float3 lastBrushPosition;
     private BrushType lastBrushType;
     private Renderer brushRenderer;
+    private Material brushMaterial;
 
     private void Start()
     {
+        if (brushObject == null) return;
         brushRenderer = brushObject.GetComponentInChildren<Renderer>();
+        if (brushRenderer != null)
+            brushMaterial = brushRenderer.material;
+    }
+
+    private void OnDestroy()
+    {
+        if (brushMaterial != null)
+            Destroy(brushMaterial);
     }
 
     private void Update()
@@ -66,8 +76,8 @@ public class SdfMouseBrush : MonoBehaviour
         brushObject.transform.position = worldPos;
         brushObject.transform.localScale = Vector3.one * (brushRadius * 2f);
 
-        if (brushRenderer != null)
-            brushRenderer.material.color = brushType == BrushType.Add ? addColor : subtractColor;
+        if (brushMaterial != null)
+            brushMaterial.color = brushType == BrushType.Add ? addColor : subtractColor;
     }
 
     private void SetIndicatorActive(bool active)
