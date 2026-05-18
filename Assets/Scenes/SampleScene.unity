@@ -527,7 +527,7 @@ MonoBehaviour:
   lookDeltaAction: {fileID: 320918405357286050, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   moveSpeed: 8
   verticalSpeed: 8
-  lookSensitivity: 0.1
+  lookSensitivity: 0.15
   invertY: 0
   minPitch: -89
   maxPitch: 89
@@ -827,7 +827,10 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   brushRadius: 0.5
-  brushStrength: 0.5
+  brushStrength: 0.2
+  scrollSensitivity: 0.5
+  minRadius: 0.1
+  maxRadius: 5
   brushObject: {fileID: 41467684}
   addColor: {r: 0, g: 1, b: 0, a: 1}
   subtractColor: {r: 1, g: 0, b: 0, a: 1}
@@ -864,7 +867,7 @@ MonoBehaviour:
   chunkTarget: {fileID: 330585546}
   chunkRenderDistance: 3
   fieldMode: 1
-  resolution: 64
+  resolution: 256
   spacing: 1
   fieldOffset:
     x: 0

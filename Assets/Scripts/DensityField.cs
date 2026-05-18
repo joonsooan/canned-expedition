@@ -31,7 +31,7 @@ public class DensityField : MonoBehaviour
     [Header("Field")]
     [SerializeField] private DensityFieldMode fieldMode = DensityFieldMode.Sphere;
     [Tooltip("격자 한 변의 샘플 수")]
-    [Range(2, 128)]
+    [Range(2, 256)]
     [SerializeField] private int resolution = 16;
     [Tooltip("셀 간격 (월드 단위)")]
     [Range(0.01f, 20f)]
@@ -138,7 +138,7 @@ public class DensityField : MonoBehaviour
                 pendingBrushes.Clear();
                 timer = 0f;
                 isDirty = false;
-                UpdateGizmoBuffer();
+                if (drawDensityGizmo) UpdateGizmoBuffer();
             }
             SyncSurfaceCollider();
             UpdateBounds();
@@ -152,7 +152,7 @@ public class DensityField : MonoBehaviour
                 RefreshFieldContents();
             else
                 RefreshPendingBrushes();
-            UpdateGizmoBuffer();
+            if (drawDensityGizmo) UpdateGizmoBuffer();
             timer = 0f;
             isDirty = false;
         }
@@ -354,6 +354,7 @@ public class DensityField : MonoBehaviour
         argsBuffer?.Release();
         if (isoSurfaceMesh != null)
             Destroy(isoSurfaceMesh);
+        chunkManager.Dispose();
     }
 
     private void SyncSurfaceCollider()

@@ -11,6 +11,9 @@ public class SdfMouseBrush : MonoBehaviour
     [Header("Brush Settings")]
     [SerializeField] private float brushRadius = 0.5f;
     [SerializeField] private float brushStrength = 0.5f;
+    [SerializeField] private float scrollSensitivity = 0.1f;
+    [SerializeField] private float minRadius = 0.1f;
+    [SerializeField] private float maxRadius = 10f;
 
     [Header("Brush Object")]
     [SerializeField] private GameObject brushObject;
@@ -43,6 +46,13 @@ public class SdfMouseBrush : MonoBehaviour
         {
             SetIndicatorActive(false);
             return;
+        }
+
+        float scroll = Input.GetAxis("Mouse ScrollWheel");
+        if (scroll != 0f)
+        {
+            brushRadius = Mathf.Clamp(brushRadius + scroll * scrollSensitivity * brushRadius, minRadius, maxRadius);
+            hasLastBrush = false;
         }
 
         bool hasHit = TryGetWorldPos(out float3 worldPos);

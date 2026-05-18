@@ -85,6 +85,7 @@ public class ChunkManager
     private readonly HashSet<ChunkCoord> desiredChunks = new HashSet<ChunkCoord>();
 
     private FieldData[] fieldData;
+    private NativeArray<FieldData> persistentFieldData;
     private int resolution;
     private float spacing;
     private float3 worldOrigin;
@@ -104,7 +105,22 @@ public class ChunkManager
         spacing = fieldSpacing;
         worldOrigin = origin;
         isoSurfaceMesh = mesh;
+
+        if (persistentFieldData.IsCreated && persistentFieldData.Length != data.Length)
+        {
+            persistentFieldData.Dispose();
+            persistentFieldData = default;
+        }
+        if (!persistentFieldData.IsCreated)
+            persistentFieldData = new NativeArray<FieldData>(data.Length, Allocator.Persistent);
+
         ResetChunks();
+    }
+
+    public void Dispose()
+    {
+        if (persistentFieldData.IsCreated)
+            persistentFieldData.Dispose();
     }
 
     public void SetLoadTarget(Transform target)
@@ -299,7 +315,7 @@ public class ChunkManager
     private ChunkCoord GetTargetChunkCoord()
     {
         Transform target = GetChunkLoadTarget();
-        float3 targetPosition = target != null ? (float3)target.position : worldOrigin;
+        float3 targetPosition = (float3)target.position;
         int3 cell = WorldToCellCoord(targetPosition);
         int maxCell = resolution - 2;
         cell = math.clamp(cell, int3.zero, new int3(maxCell, maxCell, maxCell));
@@ -355,19 +371,18 @@ public class ChunkManager
         if (!anyDirty) return false;
 
         var nativeBrushes = ListToNativeArray(brushes, Allocator.TempJob);
-        var nativeField = new NativeArray<FieldData>(fieldData, Allocator.TempJob);
+        persistentFieldData.CopyFrom(fieldData);
 
         foreach (var chunk in activeChunks.Values)
         {
             if (!chunk.dirty) continue;
             int appliedCount = GetAppliedBrushCount(chunk.coord);
             if (appliedCount >= brushes.Count) continue;
-            RunBrushJobForChunk(chunk, nativeField, nativeBrushes, appliedCount, brushes.Count);
+            RunBrushJobForChunk(chunk, persistentFieldData, nativeBrushes, appliedCount, brushes.Count);
             appliedBrushCounts[chunk.coord] = brushes.Count;
         }
 
-        nativeField.CopyTo(fieldData);
-        nativeField.Dispose();
+        persistentFieldData.CopyTo(fieldData);
         nativeBrushes.Dispose();
         return true;
     }
