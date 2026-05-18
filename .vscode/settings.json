@@ -67,5 +67,11 @@
         "*.sln": "*.csproj",
         "*.slnx": "*.csproj"
     },
-    "dotnet.defaultSolution": "canned-expedition.slnx"
+    "dotnet.defaultSolution": "canned-expedition.slnx",
+    "dotrush.roslyn.projectOrSolutionFiles": [
+        "c:\\Unity Projects\\canned-expedition\\canned-expedition.slnx",
+        "c:\\Unity Projects\\canned-expedition\\My project.slnx",
+        "c:\\Unity Projects\\canned-expedition\\Assembly-CSharp-Editor.csproj",
+        "c:\\Unity Projects\\canned-expedition\\Assembly-CSharp.csproj"
+    ]
 }

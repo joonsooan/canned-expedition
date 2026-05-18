@@ -10,14 +10,14 @@ public class SphereDensityFieldGenerator : MonoBehaviour
 
     public float SphereRadius => sphereRadius;
 
-    public void Apply(FieldData[] data, float3 sdfCenter)
+    public void Apply(Unity.Collections.NativeArray<float> densities, float3 origin, int resolution, float spacing)
     {
         float r = sphereRadius;
-        for (int i = 0; i < data.Length; i++)
+        float3 sdfCenter = transform.position; // Actually the center of the sphere
+        for (int i = 0; i < densities.Length; i++)
         {
-            FieldData fd = data[i];
-            fd.density = math.length(fd.position - sdfCenter) - r;
-            data[i] = fd;
+            float3 pos = DensityField.GetPosition(i, resolution, spacing, origin);
+            densities[i] = math.length(pos - sdfCenter) - r;
         }
     }
 

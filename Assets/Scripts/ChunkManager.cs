@@ -59,21 +59,30 @@ public class ChunkManager
     [BurstCompile]
     private struct ApplyBrushesJob : IJobParallelFor
     {
-        [ReadOnly] public NativeArray<int> sampleIndices;
-        [ReadOnly] public NativeArray<BrushData> brushes;
-        [NativeDisableParallelForRestriction] public NativeArray<FieldData> fieldData;
+        public NativeArray<int> sampleIndices;
+        [ReadOnly] public NativeArray<BrushData> brushData;
+        public NativeArray<float> densities;
+        public int resolution;
+        public float spacing;
+        public float3 origin;
         public int startBrush;
         public int endBrush;
 
         public void Execute(int i)
         {
             int idx = sampleIndices[i];
-            FieldData fd = fieldData[idx];
-            float density = fd.density;
+            float density = densities[idx];
+            
+            int z = idx / (resolution * resolution);
+            int rem = idx % (resolution * resolution);
+            int y = rem / resolution;
+            int x = rem % resolution;
+            float3 centerCell = new float3(resolution / 2f, resolution / 2f, resolution / 2f);
+            float3 position = (new float3(x, y, z) - centerCell) * spacing + origin;
+
             for (int b = startBrush; b < endBrush; b++)
-                density = SdfBrush.Apply(density, fd.position, brushes[b]);
-            fd.density = density;
-            fieldData[idx] = fd;
+                density = SdfBrush.Apply(density, position, brushData[b]);
+            densities[idx] = density;
         }
     }
 
@@ -84,12 +93,13 @@ public class ChunkManager
     private readonly Dictionary<ChunkCoord, int> appliedBrushCounts = new Dictionary<ChunkCoord, int>();
     private readonly HashSet<ChunkCoord> desiredChunks = new HashSet<ChunkCoord>();
 
-    private FieldData[] fieldData;
-    private NativeArray<FieldData> persistentFieldData;
+    private NativeArray<float> densities;
+    private NativeArray<int> edgeTable;
+    private NativeArray<int> triangleTable;
     private int resolution;
     private float spacing;
     private float3 worldOrigin;
-    private Mesh isoSurfaceMesh;
+    private Mesh surfaceMesh;
     private Transform chunkLoadTarget;
     private Camera cachedMainCamera;
     private int chunkCountPerAxis = 1;
@@ -98,29 +108,32 @@ public class ChunkManager
     private ChunkCoord lastTargetChunk;
     private bool hasPendingChunkLoads;
 
-    public void Initialize(FieldData[] data, int fieldResolution, float fieldSpacing, float3 origin, Mesh mesh)
+    public void Initialize(NativeArray<float> data, int fieldResolution, float fieldSpacing, float3 origin, Mesh mesh)
     {
-        fieldData = data;
+        densities = data;
         resolution = fieldResolution;
         spacing = fieldSpacing;
         worldOrigin = origin;
-        isoSurfaceMesh = mesh;
+        surfaceMesh = mesh;
 
-        if (persistentFieldData.IsCreated && persistentFieldData.Length != data.Length)
+        if (!edgeTable.IsCreated)
         {
-            persistentFieldData.Dispose();
-            persistentFieldData = default;
+            edgeTable = new NativeArray<int>(LookupTable.edgeTable, Allocator.Persistent);
+            
+            int[] flatTriTable = new int[256 * 16];
+            for (int i = 0; i < 256; i++)
+                for (int j = 0; j < 16; j++)
+                    flatTriTable[i * 16 + j] = LookupTable.triangleTable[i, j];
+            triangleTable = new NativeArray<int>(flatTriTable, Allocator.Persistent);
         }
-        if (!persistentFieldData.IsCreated)
-            persistentFieldData = new NativeArray<FieldData>(data.Length, Allocator.Persistent);
 
         ResetChunks();
     }
 
     public void Dispose()
     {
-        if (persistentFieldData.IsCreated)
-            persistentFieldData.Dispose();
+        if (edgeTable.IsCreated) edgeTable.Dispose();
+        if (triangleTable.IsCreated) triangleTable.Dispose();
     }
 
     public void SetLoadTarget(Transform target)
@@ -148,7 +161,7 @@ public class ChunkManager
 
     public bool UpdateActiveChunks(bool force, List<BrushData> brushes, List<BrushData> pendingBrushes)
     {
-        if (fieldData == null || resolution < 2 || isoSurfaceMesh == null)
+        if (!densities.IsCreated || resolution < 2 || surfaceMesh == null)
             return false;
 
         ChunkCoord targetChunk = GetTargetChunkCoord();
@@ -207,7 +220,6 @@ public class ChunkManager
                 chunk.dirty = true;
         }
 
-        // Only rebuild and return true if geometry actually changed
         bool brushesApplied = ApplyMissingBrushesToDirtyChunks(brushes);
         bool chunksRebuilt = RebuildDirtyChunks();
         if (!brushesApplied && !chunksRebuilt && !removedAny)
@@ -255,7 +267,7 @@ public class ChunkManager
     public bool TryGetChunkBounds(float3 worldPosition, out Bounds bounds)
     {
         bounds = default;
-        if (fieldData == null || resolution < 2)
+        if (!densities.IsCreated || resolution < 2)
             return false;
 
         int maxCell = resolution - 2;
@@ -371,30 +383,31 @@ public class ChunkManager
         if (!anyDirty) return false;
 
         var nativeBrushes = ListToNativeArray(brushes, Allocator.TempJob);
-        persistentFieldData.CopyFrom(fieldData);
 
         foreach (var chunk in activeChunks.Values)
         {
             if (!chunk.dirty) continue;
             int appliedCount = GetAppliedBrushCount(chunk.coord);
             if (appliedCount >= brushes.Count) continue;
-            RunBrushJobForChunk(chunk, persistentFieldData, nativeBrushes, appliedCount, brushes.Count);
+            RunBrushJobForChunk(chunk, nativeBrushes, appliedCount, brushes.Count);
             appliedBrushCounts[chunk.coord] = brushes.Count;
         }
 
-        persistentFieldData.CopyTo(fieldData);
         nativeBrushes.Dispose();
         return true;
     }
 
-    private void RunBrushJobForChunk(ChunkData chunk, NativeArray<FieldData> nativeField, NativeArray<BrushData> nativeBrushes, int startBrush, int endBrush)
+    private void RunBrushJobForChunk(ChunkData chunk, NativeArray<BrushData> nativeBrushes, int startBrush, int endBrush)
     {
         var indices = BuildChunkSampleIndices(chunk, Allocator.TempJob);
         new ApplyBrushesJob
         {
             sampleIndices = indices,
-            brushes = nativeBrushes,
-            fieldData = nativeField,
+            brushData = nativeBrushes,
+            densities = densities,
+            resolution = resolution,
+            spacing = spacing,
+            origin = worldOrigin,
             startBrush = startBrush,
             endBrush = endBrush
         }.Schedule(indices.Length, 64).Complete();
@@ -438,7 +451,11 @@ public class ChunkManager
 
             chunk.vertices.Clear();
             chunk.indices.Clear();
-            MarchingCubes.BuildMeshRange(fieldData, resolution, IsoValue, chunk.minCell, chunk.maxCell, chunk.vertices, chunk.indices);
+            MarchingCubes.BuildMeshRange(
+                densities, resolution, spacing, worldOrigin, IsoValue,
+                chunk.minCell, chunk.maxCell,
+                chunk.vertices, chunk.indices,
+                edgeTable, triangleTable);
             chunk.dirty = false;
             anyRebuilt = true;
         }
@@ -460,7 +477,7 @@ public class ChunkManager
             }
         }
 
-        MarchingCubes.ApplyMesh(isoSurfaceMesh, combinedVertices, combinedIndices);
+        MarchingCubes.ApplyMesh(surfaceMesh, combinedVertices, combinedIndices);
     }
 
     private int GetIndex(int x, int y, int z)

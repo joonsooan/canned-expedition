@@ -2,11 +2,7 @@ using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
 
-public struct FieldData
-{
-    public float3 position;
-    public float density;
-}
+using Unity.Collections;
 
 public enum DensityFieldMode
 {
@@ -57,21 +53,20 @@ public class DensityField : MonoBehaviour
     [SerializeField] private MeshCollider surfaceCollider;
 
     [Header("Editor")]
-    [Range(0.001f, 1f)]
     [SerializeField] private float editorGizmoRadius = 0.05f;
 
-    private FieldData[] fieldData;
+    private NativeArray<float> densities;
     private ComputeBuffer gizmoBuffer;
     private ComputeBuffer argsBuffer;
     private Bounds bounds;
     private float timer;
-    private Mesh isoSurfaceMesh;
+    private Mesh surfaceMesh;
     private bool isDirty = true;
     private bool requiresFullRefresh = true;
     private SphereDensityFieldGenerator subscribedGenerator;
     private TerrainDensityFieldGenerator subscribedTerrainGenerator;
 
-    public FieldData[] FieldData => fieldData;
+    public NativeArray<float> Densities => densities;
     public int Resolution => resolution;
     public float Spacing => spacing;
     public float3 FieldOffset => fieldOffset;
@@ -82,7 +77,7 @@ public class DensityField : MonoBehaviour
     public void SetChunkLoadTarget(Transform target)
     {
         chunkManager.SetLoadTarget(target);
-        if (fieldData == null || isoSurfaceMesh == null)
+        if (!densities.IsCreated || surfaceMesh == null)
             return;
 
         if (chunkManager.UpdateActiveChunks(true, brushes, pendingBrushes))
@@ -99,7 +94,7 @@ public class DensityField : MonoBehaviour
 
     private void Awake()
     {
-        isoSurfaceMesh = new Mesh { name = "IsoSurface" };
+        surfaceMesh = new Mesh { name = "SurfaceMesh" };
     }
 
     private void OnEnable()
@@ -128,7 +123,7 @@ public class DensityField : MonoBehaviour
 
     private void Update()
     {
-        if (fieldData == null) return;
+        if (!densities.IsCreated) return;
 
         bool hadPendingBrushes = pendingBrushes.Count > 0;
         if (chunkManager.UpdateActiveChunks(false, brushes, pendingBrushes))
@@ -165,17 +160,18 @@ public class DensityField : MonoBehaviour
             Graphics.DrawMeshInstancedIndirect(gizmoMesh, 0, gizmoMaterial, bounds, argsBuffer);
         }
 
-        if (isoSurfaceMesh != null && surfaceMaterial != null && isoSurfaceMesh.vertexCount > 0)
+        if (surfaceMesh != null && surfaceMaterial != null && surfaceMesh.vertexCount > 0)
         {
-            Graphics.DrawMesh(isoSurfaceMesh, Matrix4x4.identity, surfaceMaterial, gameObject.layer);
+            Graphics.DrawMesh(surfaceMesh, Matrix4x4.identity, surfaceMaterial, gameObject.layer);
         }
     }
 
     public void InitializeField()
     {
         timer = 0f;
-        fieldData = new FieldData[resolution * resolution * resolution];
-        chunkManager.Initialize(fieldData, resolution, spacing, WorldOrigin, isoSurfaceMesh);
+        if (densities.IsCreated) densities.Dispose();
+        densities = new NativeArray<float>(resolution * resolution * resolution, Allocator.Persistent);
+        chunkManager.Initialize(densities, resolution, spacing, WorldOrigin, surfaceMesh);
         chunkManager.SetLoadRadius(chunkRenderDistance);
         RefreshFieldContents();
         isDirty = false;
@@ -210,7 +206,7 @@ public class DensityField : MonoBehaviour
 
     private void HandleGeneratorChanged()
     {
-        if (!Application.isPlaying || isoSurfaceMesh == null)
+        if (!Application.isPlaying || surfaceMesh == null)
         {
             isDirty = true;
             requiresFullRefresh = true;
@@ -228,6 +224,16 @@ public class DensityField : MonoBehaviour
         return x + resolution * y + resolution * resolution * z;
     }
 
+    public static float3 GetPosition(int index, int resolution, float spacing, float3 origin)
+    {
+        int z = index / (resolution * resolution);
+        int rem = index % (resolution * resolution);
+        int y = rem / resolution;
+        int x = rem % resolution;
+        float3 centerCell = new float3(resolution / 2f, resolution / 2f, resolution / 2f);
+        return (new float3(x, y, z) - centerCell) * spacing + origin;
+    }
+
     private void RefreshFieldContents()
     {
         brushes.Clear();
@@ -239,7 +245,7 @@ public class DensityField : MonoBehaviour
         pendingBrushes.Clear();
         requiresFullRefresh = false;
 
-        chunkManager.Initialize(fieldData, resolution, spacing, origin, isoSurfaceMesh);
+        chunkManager.Initialize(densities, resolution, spacing, origin, surfaceMesh);
         chunkManager.SetLoadRadius(chunkRenderDistance);
         chunkManager.RebuildForFullField(brushes);
         SyncSurfaceCollider();
@@ -258,22 +264,10 @@ public class DensityField : MonoBehaviour
 
     private float3 InitializeFieldAndDensity()
     {
-        float3 centerCell = new float3(resolution / 2f, resolution / 2f, resolution / 2f);
         float3 origin = (float3)transform.position + fieldOffset;
-        int index = 0;
-        for (int z = 0; z < resolution; z++)
+        for (int i = 0; i < densities.Length; i++)
         {
-            for (int y = 0; y < resolution; y++)
-            {
-                for (int x = 0; x < resolution; x++)
-                {
-                    FieldData fd = fieldData[index];
-                    fd.position = (new float3(x, y, z) - centerCell) * spacing + origin;
-                    fd.density = 0f;
-                    fieldData[index] = fd;
-                    index++;
-                }
-            }
+            densities[i] = 0f;
         }
 
         return origin;
@@ -285,11 +279,11 @@ public class DensityField : MonoBehaviour
         {
             case DensityFieldMode.Sphere:
                 if (generator != null)
-                    generator.Apply(fieldData, origin);
+                    generator.Apply(densities, origin, resolution, spacing);
                 break;
             case DensityFieldMode.Terrain:
                 if (terrainGenerator != null)
-                    terrainGenerator.Apply(fieldData, origin);
+                    terrainGenerator.Apply(densities, origin, resolution, spacing);
                 break;
         }
     }
@@ -303,14 +297,14 @@ public class DensityField : MonoBehaviour
 
     private void InitializeGizmo()
     {
-        if (fieldData == null || fieldData.Length == 0) return;
+        if (!densities.IsCreated || densities.Length == 0) return;
 
-        int count = fieldData.Length;
+        int count = densities.Length;
         UpdateBounds();
 
         gizmoBuffer?.Release();
         gizmoBuffer = new ComputeBuffer(count, sizeof(float) * 4);
-        gizmoBuffer.SetData(fieldData);
+        UpdateGizmoBuffer();
 
         if (gizmoMaterial != null)
         {
@@ -336,24 +330,27 @@ public class DensityField : MonoBehaviour
 
     private void OnDrawGizmos()
     {
-        if (!drawDensityGizmo || fieldData == null) return;
+        if (!drawDensityGizmo || !densities.IsCreated) return;
 
-        for (int i = 0; i < fieldData.Length; i++)
+        float3 origin = WorldOrigin;
+        for (int i = 0; i < densities.Length; i++)
         {
-            float d = fieldData[i].density;
+            float d = densities[i];
+            float3 pos = GetPosition(i, resolution, spacing, origin);
             Gizmos.color = d <= 0f ? Color.blue : Color.red;
-            Gizmos.DrawSphere((Vector3)fieldData[i].position, editorGizmoRadius);
+            Gizmos.DrawSphere((Vector3)pos, editorGizmoRadius);
         }
     }
 
     private void OnDestroy()
     {
+        if (densities.IsCreated) densities.Dispose();
         if (surfaceCollider != null)
             surfaceCollider.sharedMesh = null;
         gizmoBuffer?.Release();
         argsBuffer?.Release();
-        if (isoSurfaceMesh != null)
-            Destroy(isoSurfaceMesh);
+        if (surfaceMesh != null)
+            Destroy(surfaceMesh);
         chunkManager.Dispose();
     }
 
@@ -366,8 +363,8 @@ public class DensityField : MonoBehaviour
         }
 
         surfaceCollider.sharedMesh = null;
-        if (isoSurfaceMesh != null && isoSurfaceMesh.vertexCount > 0)
-            surfaceCollider.sharedMesh = isoSurfaceMesh;
+        if (surfaceMesh != null && surfaceMesh.vertexCount > 0)
+            surfaceCollider.sharedMesh = surfaceMesh;
     }
 
     public void AddBrush(float3 center, float radius, float strength, BrushType type)
@@ -396,23 +393,33 @@ public class DensityField : MonoBehaviour
     private void ApplyBrushes(List<BrushData> source)
     {
         if (source.Count == 0) return;
+        float3 origin = WorldOrigin;
 
-        for (int i = 0; i < fieldData.Length; i++)
+        for (int i = 0; i < densities.Length; i++)
         {
-            FieldData fd = fieldData[i];
-            float density = fd.density;
+            float3 pos = GetPosition(i, resolution, spacing, origin);
+            float density = densities[i];
             foreach (var brush in source)
             {
-                density = SdfBrush.Apply(density, fd.position, brush);
+                density = SdfBrush.Apply(density, pos, brush);
             }
-            fd.density = density;
-            fieldData[i] = fd;
+            densities[i] = density;
         }
     }
 
     private void UpdateGizmoBuffer()
     {
-        if (gizmoBuffer != null)
-            gizmoBuffer.SetData(fieldData);
+        if (gizmoBuffer != null && densities.IsCreated)
+        {
+            var gizmoData = new NativeArray<float4>(densities.Length, Allocator.Temp);
+            float3 origin = WorldOrigin;
+            for (int i = 0; i < densities.Length; i++)
+            {
+                float3 pos = GetPosition(i, resolution, spacing, origin);
+                gizmoData[i] = new float4(pos, densities[i]);
+            }
+            gizmoBuffer.SetData(gizmoData);
+            gizmoData.Dispose();
+        }
     }
 }

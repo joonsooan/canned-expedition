@@ -20,37 +20,43 @@ public class TerrainDensityFieldGenerator : MonoBehaviour
     [BurstCompile]
     private struct SampleHeightJob : IJobParallelFor
     {
-        public NativeArray<FieldData> data;
+        public NativeArray<float> densities;
+        public float3 origin;
         public float3 sdfCenter;
+        public int resolution;
+        public float spacing;
         public float amplitude;
         public float baseHeight;
         public TerrainNoiseConfig config;
 
         public void Execute(int i)
         {
-            FieldData fd = data[i];
-            float3 pRel = fd.position - sdfCenter;
+            int z = i / (resolution * resolution);
+            int rem = i % (resolution * resolution);
+            int y = rem / resolution;
+            int x = rem % resolution;
+            float3 centerCell = new float3(resolution / 2f, resolution / 2f, resolution / 2f);
+            float3 pos = (new float3(x, y, z) - centerCell) * spacing + origin;
+
+            float3 pRel = pos - sdfCenter;
             float n = TerrainNoiseSampler.SampleHeight(pRel.xz, config);
-            fd.density = pRel.y - amplitude * n - baseHeight;
-            data[i] = fd;
+            densities[i] = pRel.y - amplitude * n - baseHeight;
         }
     }
 
-    public void Apply(FieldData[] data, float3 sdfCenter)
+    public void Apply(NativeArray<float> densities, float3 origin, int resolution, float spacing)
     {
-        var native = new NativeArray<FieldData>(data, Allocator.TempJob);
-
         new SampleHeightJob
         {
-            data = native,
-            sdfCenter = sdfCenter,
+            densities = densities,
+            origin = origin,
+            sdfCenter = transform.position,
+            resolution = resolution,
+            spacing = spacing,
             amplitude = amplitude,
             baseHeight = baseHeight,
             config = noise
-        }.Schedule(data.Length, 64).Complete();
-
-        native.CopyTo(data);
-        native.Dispose();
+        }.Schedule(densities.Length, 64).Complete();
     }
 
     private void OnValidate()
