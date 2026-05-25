@@ -867,7 +867,7 @@ MonoBehaviour:
   chunkTarget: {fileID: 330585546}
   chunkRenderDistance: 3
   fieldMode: 1
-  resolution: 512
+  resolution: 8096
   spacing: 1
   fieldOffset:
     x: 0

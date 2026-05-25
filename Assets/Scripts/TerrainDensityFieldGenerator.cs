@@ -18,9 +18,9 @@ public class TerrainDensityFieldGenerator : MonoBehaviour
     public event System.Action Changed;
 
     [BurstCompile]
-    private struct SampleHeightJob : IJobParallelFor
+    private struct SampleHeightJob2D : IJobParallelFor
     {
-        public NativeArray<float> densities;
+        [WriteOnly] [NativeDisableParallelForRestriction] public NativeArray<float> densities;
         public float3 origin;
         public float3 sdfCenter;
         public int resolution;
@@ -29,24 +29,33 @@ public class TerrainDensityFieldGenerator : MonoBehaviour
         public float baseHeight;
         public TerrainNoiseConfig config;
 
-        public void Execute(int i)
+        public void Execute(int index2D)
         {
-            int z = i / (resolution * resolution);
-            int rem = i % (resolution * resolution);
-            int y = rem / resolution;
-            int x = rem % resolution;
-            float3 centerCell = new float3(resolution / 2f, resolution / 2f, resolution / 2f);
-            float3 pos = (new float3(x, y, z) - centerCell) * spacing + origin;
+            int z = index2D / resolution;
+            int x = index2D % resolution;
+            
+            float centerCell = resolution / 2f;
+            
+            float posX = (x - centerCell) * spacing + origin.x;
+            float posZ = (z - centerCell) * spacing + origin.z;
+            
+            float2 pRelXZ = new float2(posX - sdfCenter.x, posZ - sdfCenter.z);
+            float n = TerrainNoiseSampler.SampleHeight(pRelXZ, config);
+            float baseDensityVal = -amplitude * n - baseHeight;
 
-            float3 pRel = pos - sdfCenter;
-            float n = TerrainNoiseSampler.SampleHeight(pRel.xz, config);
-            densities[i] = pRel.y - amplitude * n - baseHeight;
+            for (int y = 0; y < resolution; y++)
+            {
+                float posY = (y - centerCell) * spacing + origin.y;
+                float pRelY = posY - sdfCenter.y;
+                int index3D = x + (resolution * y) + (resolution * resolution * z);
+                densities[index3D] = pRelY + baseDensityVal;
+            }
         }
     }
 
     public void Apply(NativeArray<float> densities, float3 origin, int resolution, float spacing)
     {
-        new SampleHeightJob
+        new SampleHeightJob2D
         {
             densities = densities,
             origin = origin,
@@ -56,7 +65,7 @@ public class TerrainDensityFieldGenerator : MonoBehaviour
             amplitude = amplitude,
             baseHeight = baseHeight,
             config = noise
-        }.Schedule(densities.Length, 64).Complete();
+        }.Schedule(resolution * resolution, 16).Complete();
     }
 
     private void OnValidate()

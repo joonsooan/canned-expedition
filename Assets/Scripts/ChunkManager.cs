@@ -61,7 +61,7 @@ public class ChunkManager
     {
         public NativeArray<int> sampleIndices;
         [ReadOnly] public NativeArray<BrushData> brushData;
-        public NativeArray<float> densities;
+        [NativeDisableParallelForRestriction] public NativeArray<float> densities;
         public int resolution;
         public float spacing;
         public float3 origin;

@@ -1,8 +1,9 @@
 using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
-
 using Unity.Collections;
+using Unity.Burst;
+using Unity.Jobs;
 
 public enum DensityFieldMode
 {
@@ -262,12 +263,44 @@ public class DensityField : MonoBehaviour
         UpdateBounds();
     }
 
+    [BurstCompile]
+    private struct ClearDensitiesJob : IJobParallelFor
+    {
+        [WriteOnly] public NativeArray<float> densities;
+        public void Execute(int i)
+        {
+            densities[i] = 0f;
+        }
+    }
+
+    [BurstCompile]
+    private struct FillGizmoDataJob : IJobParallelFor
+    {
+        [ReadOnly] public NativeArray<float> densities;
+        [WriteOnly] public NativeArray<float4> gizmoData;
+        public int resolution;
+        public float spacing;
+        public float3 origin;
+
+        public void Execute(int i)
+        {
+            int z = i / (resolution * resolution);
+            int rem = i % (resolution * resolution);
+            int y = rem / resolution;
+            int x = rem % resolution;
+            float3 centerCell = new float3(resolution / 2f, resolution / 2f, resolution / 2f);
+            float3 pos = (new float3(x, y, z) - centerCell) * spacing + origin;
+
+            gizmoData[i] = new float4(pos, densities[i]);
+        }
+    }
+
     private float3 InitializeFieldAndDensity()
     {
         float3 origin = (float3)transform.position + fieldOffset;
-        for (int i = 0; i < densities.Length; i++)
+        if (densities.IsCreated)
         {
-            densities[i] = 0f;
+            new ClearDensitiesJob { densities = densities }.Schedule(densities.Length, 128).Complete();
         }
 
         return origin;
@@ -297,6 +330,7 @@ public class DensityField : MonoBehaviour
 
     private void InitializeGizmo()
     {
+        if (!drawDensityGizmo) return;
         if (!densities.IsCreated || densities.Length == 0) return;
 
         int count = densities.Length;
@@ -411,13 +445,18 @@ public class DensityField : MonoBehaviour
     {
         if (gizmoBuffer != null && densities.IsCreated)
         {
-            var gizmoData = new NativeArray<float4>(densities.Length, Allocator.Temp);
-            float3 origin = WorldOrigin;
-            for (int i = 0; i < densities.Length; i++)
+            if (!drawDensityGizmo) return;
+
+            var gizmoData = new NativeArray<float4>(densities.Length, Allocator.TempJob);
+            new FillGizmoDataJob
             {
-                float3 pos = GetPosition(i, resolution, spacing, origin);
-                gizmoData[i] = new float4(pos, densities[i]);
-            }
+                densities = densities,
+                gizmoData = gizmoData,
+                resolution = resolution,
+                spacing = spacing,
+                origin = WorldOrigin
+            }.Schedule(densities.Length, 128).Complete();
+
             gizmoBuffer.SetData(gizmoData);
             gizmoData.Dispose();
         }
