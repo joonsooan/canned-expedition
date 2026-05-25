@@ -865,7 +865,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DensityField
   chunkTarget: {fileID: 330585546}
-  chunkRenderDistance: 3
+  chunkRenderDistance: 4
   fieldMode: 1
   resolution: 1024
   spacing: 1
