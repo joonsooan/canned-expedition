@@ -43,22 +43,20 @@ public class Boid : MonoBehaviour
     void Start()
     {
         velocity = transform.forward * speed;
-
-        Renderer boidRenderer = GetComponent<Renderer>();
-        if (boidRenderer != null)
-        {
-            MaterialPropertyBlock props = new MaterialPropertyBlock();
-            Color pastelColor = Color.HSVToRGB(Random.Range(0f, 1f), Random.Range(0.3f, 0.5f), Random.Range(0.8f, 1.0f));
-            props.SetColor("_BaseColor", pastelColor);
-            props.SetColor("_Color", pastelColor);
-            boidRenderer.SetPropertyBlock(props);
-        }
+        SetRandomColor();
     }
 
     void Update()
     {
         InitializeBoid();
+        FindNeighbors();
+        ApplyNewBehavior();
+        HandleObstacleAvoiding();
+        UpdateMovement();
+    }
 
+    private void FindNeighbors()
+    {
         Collider[] neighbors = Physics.OverlapSphere(transform.position, neighborRadius);
 
         foreach (Collider col in neighbors)
@@ -68,7 +66,10 @@ public class Boid : MonoBehaviour
                 CalculateNeighborBoid(col);
             }
         }
+    }
 
+    private void ApplyNewBehavior()
+    {
         if (neighborCount > 0)
         {
             CalculateMoveVector();
@@ -77,7 +78,10 @@ public class Boid : MonoBehaviour
         {
             acceleration += transform.forward * 0.5f;
         }
+    }
 
+    private void HandleObstacleAvoiding()
+    {
         if (IsHeadingForCollision())
         {
             Vector3 collisionAvoidDir;
@@ -91,13 +95,19 @@ public class Boid : MonoBehaviour
                 acceleration += collisionAvoidForce;
             }
         }
+    }
 
+    private void UpdateMovement()
+    {
         velocity += acceleration * Time.deltaTime;
 
         float currentSpeed = velocity.magnitude;
-        Vector3 dir = velocity / currentSpeed;
-        currentSpeed = Mathf.Clamp(currentSpeed, speed * 0.5f, maxBoundsSpeed);
-        velocity = dir * currentSpeed;
+        if (currentSpeed > 0f)
+        {
+            Vector3 dir = velocity / currentSpeed;
+            currentSpeed = Mathf.Clamp(currentSpeed, speed * 0.5f, maxBoundsSpeed);
+            velocity = dir * currentSpeed;
+        }
 
         if (velocity != Vector3.zero)
         {
@@ -106,6 +116,23 @@ public class Boid : MonoBehaviour
         }
 
         transform.position += velocity * Time.deltaTime;
+    }
+
+    private void SetRandomColor()
+    {
+        Renderer[] renderers = GetComponentsInChildren<Renderer>();
+        if (renderers != null && renderers.Length > 0)
+        {
+            MaterialPropertyBlock props = new MaterialPropertyBlock();
+            Color pastelColor = Color.HSVToRGB(Random.Range(0f, 1f), Random.Range(0.3f, 0.5f), Random.Range(0.8f, 1.0f));
+            props.SetColor("_BaseColor", pastelColor);
+            props.SetColor("_Color", pastelColor);
+
+            foreach (Renderer r in renderers)
+            {
+                r.SetPropertyBlock(props);
+            }
+        }
     }
 
     private void InitializeBoid()
