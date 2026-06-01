@@ -2,6 +2,8 @@ using UnityEngine;
 
 public class Boid : MonoBehaviour
 {
+    public static readonly System.Collections.Generic.List<Boid> ActiveBoids = new System.Collections.Generic.List<Boid>();
+
     [Header("Boid Settings")]
     public float speed = 5f;
     public float rotationSpeed = 5f;
@@ -27,6 +29,16 @@ public class Boid : MonoBehaviour
     private Vector3 velocity;
     private Vector3 acceleration;
     private int neighborCount;
+
+    void OnEnable()
+    {
+        ActiveBoids.Add(this);
+    }
+
+    void OnDisable()
+    {
+        ActiveBoids.Remove(this);
+    }
 
     void Start()
     {
