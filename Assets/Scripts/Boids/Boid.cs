@@ -45,10 +45,6 @@ public class Boid : MonoBehaviour
         {
             CalculateMoveVector();
         }
-        else
-        {
-            moveDirection = transform.forward;
-        }
 
         if (IsCollisionAhead())
         {
@@ -69,14 +65,17 @@ public class Boid : MonoBehaviour
     {
         separationVector = Vector3.zero;
         directionVector = Vector3.zero;
-        cohesionPos = transform.position;
+        cohesionPos = Vector3.zero;
         neighborCount = 0;
     }
 
     private void CalculateNeighborBoid(Collider col)
     {
         Vector3 separationDir = transform.position - col.transform.position;
-        separationVector += separationDir.normalized; // 다른 Boid와의 간격
+        float distance = separationDir.magnitude;
+
+        separationVector += separationDir.normalized * (1f - (distance / neighborRadius));
+
         directionVector += col.transform.forward; // 진행 방향
         cohesionPos += col.transform.position; // 응집도 (중심점)
         neighborCount++;
@@ -84,8 +83,22 @@ public class Boid : MonoBehaviour
 
     private void CalculateMoveVector()
     {
-        directionVector /= neighborCount; // 진행 방향 계산
-        cohesionVector = cohesionPos / neighborCount - transform.position; // 중심점으로 이동하는 벡터
+        if (separationVector != Vector3.zero)
+        {
+            separationVector = separationVector.normalized;
+        }
+
+        if (directionVector != Vector3.zero)
+        {
+            directionVector = directionVector.normalized;
+        }
+
+        Vector3 averageCohesionPos = cohesionPos / neighborCount;
+        cohesionVector = averageCohesionPos - transform.position;
+        if (cohesionVector != Vector3.zero)
+        {
+            cohesionVector = cohesionVector.normalized;
+        }
 
         moveDirection = (separationVector * separationWeight) +
                         (directionVector * alignmentWeight) +
