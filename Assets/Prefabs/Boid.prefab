@@ -126,15 +126,16 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Boid
   speed: 30
-  rotationSpeed: 50
-  neighborRadius: 4
-  separationWeight: 1.5
-  alignmentWeight: 1
-  cohesionWeight: 1
-  obstacleAvoidWeight: 1
-  detectRadius: 1
-  avoidRadius: 5
-  avoidDetectRayAngle: 0.5
-  obstacleLayer:
+  rotationSpeed: 40
+  neighborRadius: 15
+  separationWeight: 3
+  alignmentWeight: 2
+  cohesionWeight: 3
+  obstacleMask:
     serializedVersion: 2
     m_Bits: 128
+  boundsRadius: 0.5
+  collisionAvoidDst: 50
+  avoidCollisionWeight: 10
+  maxBoundsSpeed: 30
+  maxSteerForce: 5

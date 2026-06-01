@@ -11,21 +11,27 @@ public class Boid : MonoBehaviour
     public float separationWeight = 1f;
     public float alignmentWeight = 1f;
     public float cohesionWeight = 1f;
-    public float obstacleAvoidWeight = 1f;
 
-    [Header("Avoid Settings")]
-    public float detectRadius = 1f;
-    public float avoidRadius = 1f;
-    public float avoidDetectRayAngle = 0.5f;
-    public LayerMask obstacleLayer;
+    [Header("Obstacle Avoidance Settings")]
+    public LayerMask obstacleMask;
+    public float boundsRadius = 0.25f;
+    public float collisionAvoidDst = 5f;
+    public float avoidCollisionWeight = 30f;
+    public float maxBoundsSpeed = 5f;
+    public float maxSteerForce = 10f;
 
     private Vector3 separationVector;
     private Vector3 directionVector;
     private Vector3 cohesionPos;
     private Vector3 cohesionVector;
-    private Vector3 obstacleAvoidVector;
-    private Vector3 moveDirection;
+    private Vector3 velocity;
+    private Vector3 acceleration;
     private int neighborCount;
+
+    void Start()
+    {
+        velocity = transform.forward * speed;
+    }
 
     void Update()
     {
@@ -45,20 +51,39 @@ public class Boid : MonoBehaviour
         {
             CalculateMoveVector();
         }
-
-        if (IsCollisionAhead())
+        else
         {
-            obstacleAvoidVector = CalculateAvoidDirection();
-            moveDirection = Vector3.Lerp(moveDirection, obstacleAvoidVector * obstacleAvoidWeight, Time.deltaTime * rotationSpeed);
+            acceleration += transform.forward * 0.5f;
         }
 
-        if (moveDirection != Vector3.zero)
+        if (IsHeadingForCollision())
         {
-            Quaternion rotation = Quaternion.LookRotation(moveDirection);
-            transform.rotation = Quaternion.Slerp(transform.rotation, rotation, rotationSpeed * Time.deltaTime);
+            Vector3 collisionAvoidDir;
+            float distanceToObstacle;
+
+            if (GetObstacleDistance(out collisionAvoidDir, out distanceToObstacle))
+            {
+                float proximityFactor = 1f - (distanceToObstacle / collisionAvoidDst);
+                Vector3 collisionAvoidForce = SteerTowards(collisionAvoidDir) * avoidCollisionWeight * (1f + proximityFactor * 2f);
+
+                acceleration += collisionAvoidForce;
+            }
         }
 
-        transform.position += transform.forward * speed * Time.deltaTime;
+        velocity += acceleration * Time.deltaTime;
+
+        float currentSpeed = velocity.magnitude;
+        Vector3 dir = velocity / currentSpeed;
+        currentSpeed = Mathf.Clamp(currentSpeed, speed * 0.5f, maxBoundsSpeed);
+        velocity = dir * currentSpeed;
+
+        if (velocity != Vector3.zero)
+        {
+            Quaternion targetRotation = Quaternion.LookRotation(velocity);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+        }
+
+        transform.position += velocity * Time.deltaTime;
     }
 
     private void InitializeBoid()
@@ -66,6 +91,7 @@ public class Boid : MonoBehaviour
         separationVector = Vector3.zero;
         directionVector = Vector3.zero;
         cohesionPos = Vector3.zero;
+        acceleration = Vector3.zero;
         neighborCount = 0;
     }
 
@@ -75,80 +101,85 @@ public class Boid : MonoBehaviour
         float distance = separationDir.magnitude;
 
         separationVector += separationDir.normalized * (1f - (distance / neighborRadius));
-
-        directionVector += col.transform.forward; // 진행 방향
-        cohesionPos += col.transform.position; // 응집도 (중심점)
+        directionVector += col.transform.forward;
+        cohesionPos += col.transform.position;
         neighborCount++;
     }
 
     private void CalculateMoveVector()
     {
-        if (separationVector != Vector3.zero)
-        {
-            separationVector = separationVector.normalized;
-        }
-
-        if (directionVector != Vector3.zero)
-        {
-            directionVector = directionVector.normalized;
-        }
+        if (separationVector != Vector3.zero) separationVector = separationVector.normalized;
+        if (directionVector != Vector3.zero) directionVector = directionVector.normalized;
 
         Vector3 averageCohesionPos = cohesionPos / neighborCount;
         cohesionVector = averageCohesionPos - transform.position;
-        if (cohesionVector != Vector3.zero)
-        {
-            cohesionVector = cohesionVector.normalized;
-        }
+        if (cohesionVector != Vector3.zero) cohesionVector = cohesionVector.normalized;
 
-        moveDirection = (separationVector * separationWeight) +
+        acceleration += (separationVector * separationWeight) +
                         (directionVector * alignmentWeight) +
                         (cohesionVector * cohesionWeight);
     }
 
-    private bool IsCollisionAhead()
+    private bool IsHeadingForCollision()
     {
         RaycastHit hit;
+        Vector3 moveDir = velocity != Vector3.zero ? velocity.normalized : transform.forward;
 
-        if (Physics.SphereCast(transform.position, detectRadius, transform.forward, out hit, avoidRadius, obstacleLayer))
+        if (Physics.SphereCast(transform.position, boundsRadius, moveDir, out hit, collisionAvoidDst, obstacleMask))
         {
             return true;
         }
-
         return false;
     }
 
-    private Vector3 CalculateAvoidDirection()
+    private bool GetObstacleDistance(out Vector3 avoidDir, out float distance)
     {
         RaycastHit hit;
+        Vector3 moveDir;
 
-        // 정면 충돌
-        if (Physics.Raycast(transform.position, transform.forward, out hit, avoidRadius, obstacleLayer))
+        if (velocity != Vector3.zero)
         {
-            return hit.normal;
+            moveDir = velocity.normalized;
+        }
+        else
+        {
+            moveDir = transform.forward;
         }
 
-        Vector3[] rays = { transform.up, -transform.up, transform.right, -transform.right };
-        foreach (Vector3 rayDir in rays)
+        if (Physics.SphereCast(transform.position, boundsRadius, moveDir, out hit, collisionAvoidDst, obstacleMask))
         {
-            // 상하좌우로 살짝 틀어진 Ray를 쏴서 빈 공간 검사
-            Vector3 detectRay = (transform.forward + rayDir * avoidDetectRayAngle).normalized;
-            if (!Physics.Raycast(transform.position, detectRay, avoidRadius, obstacleLayer))
+            distance = hit.distance;
+            avoidDir = ObstacleRays();
+            return true;
+        }
+
+        avoidDir = transform.forward;
+        distance = collisionAvoidDst;
+        return false;
+    }
+
+    private Vector3 ObstacleRays()
+    {
+        Vector3[] rayDirections = BoidHelper.directions;
+        Quaternion lookRotation = velocity != Vector3.zero ? Quaternion.LookRotation(velocity.normalized) : transform.rotation;
+
+        for (int i = 0; i < rayDirections.Length; i++)
+        {
+            Vector3 dir = lookRotation * rayDirections[i];
+            Ray ray = new Ray(transform.position, dir);
+            if (!Physics.SphereCast(ray, boundsRadius, collisionAvoidDst, obstacleMask))
             {
-                return detectRay;
+                return dir;
             }
         }
 
-        return -transform.forward;
+        return transform.forward;
     }
 
-    void OnDrawGizmos()
+    private Vector3 SteerTowards(Vector3 vector)
     {
-        // 진행 방향
-        Gizmos.color = Color.red;
-        Gizmos.DrawRay(transform.position, moveDirection.normalized);
-
-        // 감지 Ray
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawLine(transform.position, transform.position + transform.forward * avoidRadius);
+        Vector3 desiredVelocity = vector.normalized * maxBoundsSpeed;
+        Vector3 steer = desiredVelocity - velocity;
+        return Vector3.ClampMagnitude(steer, maxSteerForce);
     }
 }
