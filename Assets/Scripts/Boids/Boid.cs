@@ -9,6 +9,10 @@ public class Boid : MonoBehaviour
     public float rotationSpeed = 5f;
     public float neighborRadius = 5f;
 
+    [Header("Color Settings")]
+    public bool useRandomColor = true;
+    public Color boidColor = Color.white;
+
     [Header("Behavior Weights")]
     public float separationWeight = 1f;
     public float alignmentWeight = 1f;
@@ -22,40 +26,40 @@ public class Boid : MonoBehaviour
     public float maxBoundsSpeed = 5f;
     public float maxSteerForce = 10f;
 
-    private Vector3 separationVector;
-    private Vector3 directionVector;
-    private Vector3 cohesionPos;
-    private Vector3 cohesionVector;
-    private Vector3 velocity;
-    private Vector3 acceleration;
-    private int neighborCount;
+    protected Vector3 separationVector;
+    protected Vector3 directionVector;
+    protected Vector3 cohesionPos;
+    protected Vector3 cohesionVector;
+    protected Vector3 velocity;
+    protected Vector3 acceleration;
+    protected int neighborCount;
 
-    void OnEnable()
+    protected virtual void OnEnable()
     {
         ActiveBoids.Add(this);
     }
 
-    void OnDisable()
+    protected virtual void OnDisable()
     {
         ActiveBoids.Remove(this);
     }
 
-    void Start()
+    protected virtual void Start()
     {
         velocity = transform.forward * speed;
         SetRandomColor();
     }
 
-    void Update()
+    protected virtual void Update()
     {
         InitializeBoid();
         FindNeighbors();
-        ApplyNewBehavior();
-        HandleObstacleAvoiding();
+        ApplyFlockingBehaviors();
+        HandleObstacleAvoidance();
         UpdateMovement();
     }
 
-    private void FindNeighbors()
+    protected virtual void FindNeighbors()
     {
         Collider[] neighbors = Physics.OverlapSphere(transform.position, neighborRadius);
 
@@ -68,7 +72,7 @@ public class Boid : MonoBehaviour
         }
     }
 
-    private void ApplyNewBehavior()
+    protected virtual void ApplyFlockingBehaviors()
     {
         if (neighborCount > 0)
         {
@@ -80,7 +84,7 @@ public class Boid : MonoBehaviour
         }
     }
 
-    private void HandleObstacleAvoiding()
+    protected virtual void HandleObstacleAvoidance()
     {
         if (IsHeadingForCollision())
         {
@@ -97,7 +101,7 @@ public class Boid : MonoBehaviour
         }
     }
 
-    private void UpdateMovement()
+    protected virtual void UpdateMovement()
     {
         velocity += acceleration * Time.deltaTime;
 
@@ -118,15 +122,17 @@ public class Boid : MonoBehaviour
         transform.position += velocity * Time.deltaTime;
     }
 
-    private void SetRandomColor()
+    protected virtual void SetRandomColor()
     {
         Renderer[] renderers = GetComponentsInChildren<Renderer>();
         if (renderers != null && renderers.Length > 0)
         {
             MaterialPropertyBlock props = new MaterialPropertyBlock();
-            Color pastelColor = Color.HSVToRGB(Random.Range(0f, 1f), Random.Range(0.3f, 0.5f), Random.Range(0.8f, 1.0f));
-            props.SetColor("_BaseColor", pastelColor);
-            props.SetColor("_Color", pastelColor);
+            Color colorToApply = useRandomColor
+                ? Color.HSVToRGB(Random.Range(0f, 1f), Random.Range(0.3f, 0.5f), Random.Range(0.8f, 1.0f))
+                : boidColor;
+            props.SetColor("_BaseColor", colorToApply);
+            props.SetColor("_Color", colorToApply);
 
             foreach (Renderer r in renderers)
             {
@@ -135,7 +141,7 @@ public class Boid : MonoBehaviour
         }
     }
 
-    private void InitializeBoid()
+    protected virtual void InitializeBoid()
     {
         separationVector = Vector3.zero;
         directionVector = Vector3.zero;
@@ -144,7 +150,7 @@ public class Boid : MonoBehaviour
         neighborCount = 0;
     }
 
-    private void CalculateNeighborBoid(Collider col)
+    protected virtual void CalculateNeighborBoid(Collider col)
     {
         Vector3 separationDir = transform.position - col.transform.position;
         float distance = separationDir.magnitude;
@@ -155,7 +161,7 @@ public class Boid : MonoBehaviour
         neighborCount++;
     }
 
-    private void CalculateMoveVector()
+    protected virtual void CalculateMoveVector()
     {
         if (separationVector != Vector3.zero) separationVector = separationVector.normalized;
         if (directionVector != Vector3.zero) directionVector = directionVector.normalized;
@@ -169,7 +175,7 @@ public class Boid : MonoBehaviour
                         (cohesionVector * cohesionWeight);
     }
 
-    private bool IsHeadingForCollision()
+    protected virtual bool IsHeadingForCollision()
     {
         RaycastHit hit;
         Vector3 moveDir = velocity != Vector3.zero ? velocity.normalized : transform.forward;
@@ -181,19 +187,10 @@ public class Boid : MonoBehaviour
         return false;
     }
 
-    private bool GetObstacleDistance(out Vector3 avoidDir, out float distance)
+    protected virtual bool GetObstacleDistance(out Vector3 avoidDir, out float distance)
     {
         RaycastHit hit;
-        Vector3 moveDir;
-
-        if (velocity != Vector3.zero)
-        {
-            moveDir = velocity.normalized;
-        }
-        else
-        {
-            moveDir = transform.forward;
-        }
+        Vector3 moveDir = velocity != Vector3.zero ? velocity.normalized : transform.forward;
 
         if (Physics.SphereCast(transform.position, boundsRadius, moveDir, out hit, collisionAvoidDst, obstacleMask))
         {
@@ -207,7 +204,7 @@ public class Boid : MonoBehaviour
         return false;
     }
 
-    private Vector3 ObstacleRays()
+    protected virtual Vector3 ObstacleRays()
     {
         Vector3[] rayDirections = BoidHelper.directions;
         Quaternion lookRotation = velocity != Vector3.zero ? Quaternion.LookRotation(velocity.normalized) : transform.rotation;
@@ -225,7 +222,7 @@ public class Boid : MonoBehaviour
         return transform.forward;
     }
 
-    private Vector3 SteerTowards(Vector3 vector)
+    protected virtual Vector3 SteerTowards(Vector3 vector)
     {
         Vector3 desiredVelocity = vector.normalized * maxBoundsSpeed;
         Vector3 steer = desiredVelocity - velocity;
