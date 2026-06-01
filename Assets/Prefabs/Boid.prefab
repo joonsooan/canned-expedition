@@ -125,7 +125,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 02f2d472368fe824db1cc668a32b8072, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Boid
-  speed: 20
+  speed: 15
   rotationSpeed: 30
   neighborRadius: 15
   separationWeight: 3
@@ -137,5 +137,5 @@ MonoBehaviour:
   boundsRadius: 0.5
   collisionAvoidDst: 50
   avoidCollisionWeight: 10
-  maxBoundsSpeed: 20
+  maxBoundsSpeed: 15
   maxSteerForce: 5

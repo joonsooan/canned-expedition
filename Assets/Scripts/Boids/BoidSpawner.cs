@@ -4,6 +4,7 @@ public class BoidSpawner : MonoBehaviour
 {
     [Header("Spawn Settings")]
     public GameObject boidPrefab;
+    public GameObject boidParent;
     public int spawnCount;
     public float spawnRadius;
 
@@ -24,7 +25,7 @@ public class BoidSpawner : MonoBehaviour
                 Random.Range(0f, 360f)
             );
 
-            Instantiate(boidPrefab, randPos, randRotation);
+            Instantiate(boidPrefab, randPos, randRotation, boidParent.transform);
         }
     }
 

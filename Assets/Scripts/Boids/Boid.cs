@@ -43,6 +43,16 @@ public class Boid : MonoBehaviour
     void Start()
     {
         velocity = transform.forward * speed;
+
+        Renderer boidRenderer = GetComponent<Renderer>();
+        if (boidRenderer != null)
+        {
+            MaterialPropertyBlock props = new MaterialPropertyBlock();
+            Color pastelColor = Color.HSVToRGB(Random.Range(0f, 1f), Random.Range(0.3f, 0.5f), Random.Range(0.8f, 1.0f));
+            props.SetColor("_BaseColor", pastelColor);
+            props.SetColor("_Color", pastelColor);
+            boidRenderer.SetPropertyBlock(props);
+        }
     }
 
     void Update()
