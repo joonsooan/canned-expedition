@@ -17,7 +17,25 @@ public class PredatorPreySpawner : MonoBehaviour
 
     void Start()
     {
-        SpawnBoids();
+        BoidSystemManager manager = FindFirstObjectByType<BoidSystemManager>();
+        if (manager != null)
+        {
+            if (manager.preyPrefab == null) manager.preyPrefab = preyPrefab;
+            if (manager.predatorPrefab == null) manager.predatorPrefab = predatorPrefab;
+
+            LayerMask mask = 0;
+            if (preyPrefab != null)
+            {
+                Boid b = preyPrefab.GetComponent<Boid>();
+                if (b != null) mask = b.obstacleMask;
+            }
+
+            manager.InitializeSimulation(preySpawnCount, predatorSpawnCount, mask);
+        }
+        else
+        {
+            SpawnBoids();
+        }
     }
 
     private void SpawnBoids()

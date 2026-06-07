@@ -1,0 +1,389 @@
+#pragma kernel UpdatePrey
+#pragma kernel UpdatePredators
+
+struct BoidGPUData
+{
+    float3 position;
+    float3 velocity;
+    float4 color;
+    float scale;
+    int isPredator;
+};
+
+struct ObstacleData
+{
+    float3 position;
+    float radius;
+};
+
+// Buffers for Prey
+RWStructuredBuffer<BoidGPUData> PreyBuffer;
+StructuredBuffer<BoidGPUData> PredatorBuffer;
+
+// Buffers for Predators
+RWStructuredBuffer<BoidGPUData> PredatorBufferRW;
+StructuredBuffer<BoidGPUData> PreyBufferRO;
+
+StructuredBuffer<ObstacleData> Obstacles;
+
+// Uniform variables
+uint preyCount;
+uint predatorCount;
+uint obstacleCount;
+
+float deltaTime;
+
+// Behavior parameters (Prey)
+float preySpeed;
+float preyRotationSpeed;
+float preyNeighborRadius;
+float preySeparationWeight;
+float preyAlignmentWeight;
+float preyCohesionWeight;
+float preyMaxBoundsSpeed;
+float preyMaxSteerForce;
+
+// Predator Settings (for Prey to flee)
+float predatorDetectRadius;
+float fleeWeight;
+
+// Behavior parameters (Predator)
+float predSpeed;
+float predRotationSpeed;
+float predNeighborRadius;
+float predSeparationWeight;
+float predMaxBoundsSpeed;
+float predMaxSteerForce;
+
+// Prey Settings (for Predator to chase)
+float preyDetectRadius;
+float chaseWeight;
+
+// Obstacle Avoidance
+float avoidCollisionWeight;
+float boundsRadius;
+float collisionAvoidDst;
+
+// Boundary Config
+float3 boundaryCenter;
+float boundaryRadius;
+float boundaryWeight;
+
+// Helper function to clamp magnitude of a vector
+float3 ClampMagnitude(float3 v, float maxMag)
+{
+    float len = length(v);
+    if (len > maxMag && len > 0.0)
+    {
+        return (v / len) * maxMag;
+    }
+    return v;
+}
+
+// Helper to steer towards a target velocity
+float3 SteerTowards(float3 velocity, float3 targetDir, float maxSpeed, float maxForce)
+{
+    float3 desiredVelocity = normalize(targetDir) * maxSpeed;
+    float3 steer = desiredVelocity - velocity;
+    return ClampMagnitude(steer, maxForce);
+}
+
+[numthreads(64, 1, 1)]
+void UpdatePrey(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= preyCount) return;
+
+    BoidGPUData boid = PreyBuffer[id.x];
+    float3 myPos = boid.position;
+    float3 myVel = boid.velocity;
+    float3 myDir = length(myVel) > 0.0 ? normalize(myVel) : float3(0, 0, 1);
+
+    float3 separationVector = float3(0, 0, 0);
+    float3 directionVector = float3(0, 0, 0);
+    float3 cohesionPos = float3(0, 0, 0);
+    int neighborCount = 0;
+
+    // 1. Prey-Prey Flocking
+    for (uint i = 0; i < preyCount; i++)
+    {
+        if (i == id.x) continue;
+
+        BoidGPUData other = PreyBuffer[i];
+        float3 toOther = other.position - myPos;
+        float dist = length(toOther);
+
+        if (dist > 0.0 && dist < preyNeighborRadius)
+        {
+            separationVector += (-toOther / dist) * (1.0 - (dist / preyNeighborRadius));
+            directionVector += length(other.velocity) > 0.0 ? normalize(other.velocity) : float3(0, 0, 1);
+            cohesionPos += other.position;
+            neighborCount++;
+        }
+    }
+
+    float3 acceleration = float3(0, 0, 0);
+
+    // Flocking Force
+    float3 flockingForce = float3(0, 0, 0);
+    if (neighborCount > 0)
+    {
+        if (length(separationVector) > 0.0) separationVector = normalize(separationVector);
+        if (length(directionVector) > 0.0) directionVector = normalize(directionVector);
+
+        float3 averageCohesionPos = cohesionPos / neighborCount;
+        float3 cohesionVector = averageCohesionPos - myPos;
+        if (length(cohesionVector) > 0.0) cohesionVector = normalize(cohesionVector);
+
+        flockingForce = (separationVector * preySeparationWeight) +
+                        (directionVector * preyAlignmentWeight) +
+                        (cohesionVector * preyCohesionWeight);
+    }
+    else
+    {
+        flockingForce = myDir * 0.5;
+    }
+
+    // 2. Flee from Predators
+    float3 fleeForce = float3(0, 0, 0);
+    float3 fleeVector = float3(0, 0, 0);
+    int predInSight = 0;
+
+    for (uint j = 0; j < predatorCount; j++)
+    {
+        BoidGPUData pred = PredatorBuffer[j];
+        float3 toPred = myPos - pred.position;
+        float dist = length(toPred);
+
+        if (dist > 0.0 && dist < predatorDetectRadius)
+        {
+            fleeVector += (toPred / dist) / dist;
+            predInSight++;
+        }
+    }
+
+    if (predInSight > 0 && length(fleeVector) > 0.0)
+    {
+        fleeForce = SteerTowards(myVel, fleeVector, preyMaxBoundsSpeed, preyMaxSteerForce) * fleeWeight;
+    }
+
+    // Combine forces using priorities / accumulation
+    float3 totalSteerForce = float3(0, 0, 0);
+    
+    // Predator flee has highest priority
+    if (length(fleeForce) > 0.0)
+    {
+        totalSteerForce = ClampMagnitude(totalSteerForce + fleeForce, preyMaxSteerForce);
+    }
+
+    // 3. Obstacle Avoidance
+    float3 obstacleAvoidForce = float3(0, 0, 0);
+    float nearestObstacleDist = collisionAvoidDst;
+    float3 bestAvoidDir = float3(0, 0, 0);
+    bool headingForCollision = false;
+
+    for (uint k = 0; k < obstacleCount; k++)
+    {
+        ObstacleData obs = Obstacles[k];
+        float3 toObstacle = obs.position - myPos;
+        float proj = dot(toObstacle, myDir);
+
+        if (proj > 0.0 && proj < collisionAvoidDst)
+        {
+            float3 closestPoint = myPos + myDir * proj;
+            float distToObs = length(closestPoint - obs.position);
+            float minAvoidDist = obs.radius + boundsRadius;
+
+            if (distToObs < minAvoidDist)
+            {
+                headingForCollision = true;
+                float actualDist = length(toObstacle);
+                if (actualDist < nearestObstacleDist)
+                {
+                    nearestObstacleDist = actualDist;
+                    bestAvoidDir = closestPoint - obs.position;
+                }
+            }
+        }
+    }
+
+    if (headingForCollision)
+    {
+        float proximityFactor = 1.0 - (nearestObstacleDist / collisionAvoidDst);
+        obstacleAvoidForce = SteerTowards(myVel, bestAvoidDir, preyMaxBoundsSpeed, preyMaxSteerForce) * avoidCollisionWeight * (1.0 + proximityFactor * 2.0);
+        totalSteerForce = ClampMagnitude(totalSteerForce + obstacleAvoidForce, preyMaxSteerForce);
+    }
+
+    // Add flocking if space left
+    if (length(totalSteerForce) < preyMaxSteerForce)
+    {
+        float3 steerFlock = SteerTowards(myVel, flockingForce, preyMaxBoundsSpeed, preyMaxSteerForce);
+        totalSteerForce = ClampMagnitude(totalSteerForce + steerFlock, preyMaxSteerForce);
+    }
+
+    // 4. Boundary Force
+    if (boundaryRadius > 0.0)
+    {
+        float3 toCenter = boundaryCenter - myPos;
+        float distToCenter = length(toCenter);
+        if (distToCenter > boundaryRadius)
+        {
+            float3 boundaryForce = SteerTowards(myVel, toCenter, preyMaxBoundsSpeed, preyMaxSteerForce) * boundaryWeight * (distToCenter / boundaryRadius);
+            totalSteerForce = ClampMagnitude(totalSteerForce + boundaryForce, preyMaxSteerForce);
+        }
+    }
+
+    acceleration = totalSteerForce;
+
+    // Movement update
+    myVel += acceleration * deltaTime;
+    float currentSpeed = length(myVel);
+    if (currentSpeed > 0.0)
+    {
+        float3 dir = myVel / currentSpeed;
+        currentSpeed = clamp(currentSpeed, preySpeed * 0.5, preyMaxBoundsSpeed);
+        myVel = dir * currentSpeed;
+    }
+
+    myPos += myVel * deltaTime;
+
+    // Save
+    boid.position = myPos;
+    boid.velocity = myVel;
+    PreyBuffer[id.x] = boid;
+}
+
+[numthreads(64, 1, 1)]
+void UpdatePredators(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= predatorCount) return;
+
+    BoidGPUData boid = PredatorBufferRW[id.x];
+    float3 myPos = boid.position;
+    float3 myVel = boid.velocity;
+    float3 myDir = length(myVel) > 0.0 ? normalize(myVel) : float3(0, 0, 1);
+
+    float3 separationVector = float3(0, 0, 0);
+    int neighborCount = 0;
+
+    // 1. Predator-Predator Separation
+    for (uint i = 0; i < predatorCount; i++)
+    {
+        if (i == id.x) continue;
+
+        BoidGPUData other = PredatorBufferRW[i];
+        float3 toOther = other.position - myPos;
+        float dist = length(toOther);
+
+        if (dist > 0.0 && dist < predNeighborRadius)
+        {
+            separationVector += (-toOther / dist) * (1.0 - (dist / predNeighborRadius));
+            neighborCount++;
+        }
+    }
+
+    float3 totalSteerForce = float3(0, 0, 0);
+
+    // 2. Obstacle Avoidance
+    float3 obstacleAvoidForce = float3(0, 0, 0);
+    float nearestObstacleDist = collisionAvoidDst;
+    float3 bestAvoidDir = float3(0, 0, 0);
+    bool headingForCollision = false;
+
+    for (uint k = 0; k < obstacleCount; k++)
+    {
+        ObstacleData obs = Obstacles[k];
+        float3 toObstacle = obs.position - myPos;
+        float proj = dot(toObstacle, myDir);
+
+        if (proj > 0.0 && proj < collisionAvoidDst)
+        {
+            float3 closestPoint = myPos + myDir * proj;
+            float distToObs = length(closestPoint - obs.position);
+            float minAvoidDist = obs.radius + boundsRadius;
+
+            if (distToObs < minAvoidDist)
+            {
+                headingForCollision = true;
+                float actualDist = length(toObstacle);
+                if (actualDist < nearestObstacleDist)
+                {
+                    nearestObstacleDist = actualDist;
+                    bestAvoidDir = closestPoint - obs.position;
+                }
+            }
+        }
+    }
+
+    if (headingForCollision)
+    {
+        float proximityFactor = 1.0 - (nearestObstacleDist / collisionAvoidDst);
+        obstacleAvoidForce = SteerTowards(myVel, bestAvoidDir, predMaxBoundsSpeed, predMaxSteerForce) * avoidCollisionWeight * (1.0 + proximityFactor * 2.0);
+        totalSteerForce = ClampMagnitude(totalSteerForce + obstacleAvoidForce, predMaxSteerForce);
+    }
+
+    // 3. Chase Prey
+    float3 chaseForce = float3(0, 0, 0);
+    float nearestPreyDist = 999999.0;
+    float3 nearestPreyPos = float3(0, 0, 0);
+    bool foundPrey = false;
+
+    for (uint j = 0; j < preyCount; j++)
+    {
+        BoidGPUData prey = PreyBufferRO[j];
+        float3 toPrey = prey.position - myPos;
+        float dist = length(toPrey);
+
+        if (dist > 0.0 && dist < preyDetectRadius)
+        {
+            if (dist < nearestPreyDist)
+            {
+                nearestPreyDist = dist;
+                nearestPreyPos = prey.position;
+                foundPrey = true;
+            }
+        }
+    }
+
+    if (foundPrey && length(totalSteerForce) < predMaxSteerForce)
+    {
+        float3 chaseDir = nearestPreyPos - myPos;
+        chaseForce = SteerTowards(myVel, chaseDir, predMaxBoundsSpeed, predMaxSteerForce) * chaseWeight;
+        totalSteerForce = ClampMagnitude(totalSteerForce + chaseForce, predMaxSteerForce);
+    }
+
+    // 4. Separation from other Predators
+    if (neighborCount > 0 && length(totalSteerForce) < predMaxSteerForce)
+    {
+        float3 sepForce = SteerTowards(myVel, separationVector, predMaxBoundsSpeed, predMaxSteerForce) * predSeparationWeight;
+        totalSteerForce = ClampMagnitude(totalSteerForce + sepForce, predMaxSteerForce);
+    }
+
+    // 5. Boundary Force
+    if (boundaryRadius > 0.0)
+    {
+        float3 toCenter = boundaryCenter - myPos;
+        float distToCenter = length(toCenter);
+        if (distToCenter > boundaryRadius)
+        {
+            float3 boundaryForce = SteerTowards(myVel, toCenter, predMaxBoundsSpeed, predMaxSteerForce) * boundaryWeight * (distToCenter / boundaryRadius);
+            totalSteerForce = ClampMagnitude(totalSteerForce + boundaryForce, predMaxSteerForce);
+        }
+    }
+
+    // Movement update
+    myVel += totalSteerForce * deltaTime;
+    float currentSpeed = length(myVel);
+    if (currentSpeed > 0.0)
+    {
+        float3 dir = myVel / currentSpeed;
+        currentSpeed = clamp(currentSpeed, predSpeed * 0.5, predMaxBoundsSpeed);
+        myVel = dir * currentSpeed;
+    }
+
+    myPos += myVel * deltaTime;
+
+    // Save
+    boid.position = myPos;
+    boid.velocity = myVel;
+    PredatorBufferRW[id.x] = boid;
+}
