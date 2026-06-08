@@ -54,56 +54,28 @@ public class PredatorBoid : Boid
 
         if (totalSteerForce.magnitude < maxSteerForce)
         {
-            bool hasPreys = false;
-            PreyBoid nearestPrey = null;
-            float nearestDist = Mathf.Infinity;
-
-            if (BoidSystemManager.Instance != null && BoidSystemManager.Instance.useSpatialHash)
+            Collider[] preys = Physics.OverlapSphere(transform.position, preyDetectRadius, preyMask);
+            if (preys != null && preys.Length > 0)
             {
-                BoidSystemManager.Instance.Grid.GetPreyNeighbors(transform.position, preyDetectRadius, tempPreyNeighbors);
-                int preyCount = tempPreyNeighbors.Count;
-                if (preyCount > 0)
+                Collider nearestPrey = null;
+                float nearestDist = Mathf.Infinity;
+
+                foreach (var prey in preys)
                 {
-                    hasPreys = true;
-                    for (int i = 0; i < preyCount; i++)
+                    float dist = Vector3.Distance(transform.position, prey.transform.position);
+                    if (dist < nearestDist)
                     {
-                        PreyBoid prey = tempPreyNeighbors[i];
-                        float dist = Vector3.Distance(transform.position, prey.transform.position);
-                        if (dist < nearestDist)
-                        {
-                            nearestDist = dist;
-                            nearestPrey = prey;
-                        }
+                        nearestDist = dist;
+                        nearestPrey = prey;
                     }
                 }
-            }
-            else
-            {
-                Collider[] preys = Physics.OverlapSphere(transform.position, preyDetectRadius, preyMask);
-                if (preys != null && preys.Length > 0)
-                {
-                    hasPreys = true;
-                    foreach (var prey in preys)
-                    {
-                        float dist = Vector3.Distance(transform.position, prey.transform.position);
-                        if (dist < nearestDist)
-                        {
-                            nearestDist = dist;
-                            PreyBoid preyComp = prey.GetComponent<PreyBoid>();
-                            if (preyComp != null)
-                            {
-                                nearestPrey = preyComp;
-                            }
-                        }
-                    }
-                }
-            }
 
-            if (hasPreys && nearestPrey != null)
-            {
-                Vector3 chaseDir = nearestPrey.transform.position - transform.position;
-                Vector3 chaseForce = SteerTowards(chaseDir) * chaseWeight;
-                AccumulateForce(ref totalSteerForce, chaseForce);
+                if (nearestPrey != null)
+                {
+                    Vector3 chaseDir = nearestPrey.transform.position - transform.position;
+                    Vector3 chaseForce = SteerTowards(chaseDir) * chaseWeight;
+                    AccumulateForce(ref totalSteerForce, chaseForce);
+                }
             }
         }
 
@@ -127,28 +99,13 @@ public class PredatorBoid : Boid
 
     protected override void FindNeighbors()
     {
-        if (BoidSystemManager.Instance != null && BoidSystemManager.Instance.useSpatialHash)
+        Collider[] neighbors = Physics.OverlapSphere(transform.position, neighborRadius);
+
+        foreach (Collider col in neighbors)
         {
-            BoidSystemManager.Instance.Grid.GetPredatorNeighbors(transform.position, neighborRadius, tempPredatorNeighbors);
-            int predCount = tempPredatorNeighbors.Count;
-            for (int i = 0; i < predCount; i++)
+            if (col.gameObject != gameObject && col.GetComponent<PredatorBoid>() != null)
             {
-                PredatorBoid neighbor = tempPredatorNeighbors[i];
-                if (neighbor.gameObject != gameObject)
-                {
-                    CalculateNeighborBoid(neighbor);
-                }
-            }
-        }
-        else
-        {
-            Collider[] neighbors = Physics.OverlapSphere(transform.position, neighborRadius);
-            foreach (Collider col in neighbors)
-            {
-                if (col.gameObject != gameObject && col.GetComponent<PredatorBoid>() != null)
-                {
-                    CalculateNeighborBoid(col);
-                }
+                CalculateNeighborBoid(col);
             }
         }
     }

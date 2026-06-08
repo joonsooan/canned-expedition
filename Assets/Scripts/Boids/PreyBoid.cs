@@ -38,50 +38,25 @@ public class PreyBoid : Boid
 
         Vector3 totalSteerForce = Vector3.zero;
 
-        bool hasPredators = false;
-        Vector3 fleeVector = Vector3.zero;
-
-        if (BoidSystemManager.Instance != null && BoidSystemManager.Instance.useSpatialHash)
+        Collider[] predators = Physics.OverlapSphere(transform.position, predatorDetectRadius, predatorMask);
+        if (predators != null && predators.Length > 0)
         {
-            BoidSystemManager.Instance.Grid.GetPredatorNeighbors(transform.position, predatorDetectRadius, tempPredatorNeighbors);
-            int predCount = tempPredatorNeighbors.Count;
-            if (predCount > 0)
+            Vector3 fleeVector = Vector3.zero;
+            foreach (var pred in predators)
             {
-                hasPredators = true;
-                for (int i = 0; i < predCount; i++)
+                Vector3 toPrey = transform.position - pred.transform.position;
+                float dist = toPrey.magnitude;
+                if (dist > 0f)
                 {
-                    PredatorBoid pred = tempPredatorNeighbors[i];
-                    Vector3 toPrey = transform.position - pred.transform.position;
-                    float dist = toPrey.magnitude;
-                    if (dist > 0f)
-                    {
-                        fleeVector += (toPrey / dist) / dist;
-                    }
+                    fleeVector += (toPrey / dist) / dist;
                 }
             }
-        }
-        else
-        {
-            Collider[] predators = Physics.OverlapSphere(transform.position, predatorDetectRadius, predatorMask);
-            if (predators != null && predators.Length > 0)
-            {
-                hasPredators = true;
-                foreach (var pred in predators)
-                {
-                    Vector3 toPrey = transform.position - pred.transform.position;
-                    float dist = toPrey.magnitude;
-                    if (dist > 0f)
-                    {
-                        fleeVector += (toPrey / dist) / dist;
-                    }
-                }
-            }
-        }
 
-        if (hasPredators && fleeVector != Vector3.zero)
-        {
-            Vector3 fleeForce = SteerTowards(fleeVector) * fleeWeight;
-            AccumulateForce(ref totalSteerForce, fleeForce);
+            if (fleeVector != Vector3.zero)
+            {
+                Vector3 fleeForce = SteerTowards(fleeVector) * fleeWeight;
+                AccumulateForce(ref totalSteerForce, fleeForce);
+            }
         }
 
         if (totalSteerForce.magnitude < maxSteerForce)
@@ -134,28 +109,13 @@ public class PreyBoid : Boid
 
     protected override void FindNeighbors()
     {
-        if (BoidSystemManager.Instance != null && BoidSystemManager.Instance.useSpatialHash)
+        Collider[] neighbors = Physics.OverlapSphere(transform.position, neighborRadius);
+
+        foreach (Collider col in neighbors)
         {
-            BoidSystemManager.Instance.Grid.GetPreyNeighbors(transform.position, neighborRadius, tempPreyNeighbors);
-            int preyCount = tempPreyNeighbors.Count;
-            for (int i = 0; i < preyCount; i++)
+            if (col.gameObject != gameObject && col.GetComponent<PreyBoid>() != null)
             {
-                PreyBoid neighbor = tempPreyNeighbors[i];
-                if (neighbor.gameObject != gameObject)
-                {
-                    CalculateNeighborBoid(neighbor);
-                }
-            }
-        }
-        else
-        {
-            Collider[] neighbors = Physics.OverlapSphere(transform.position, neighborRadius);
-            foreach (Collider col in neighbors)
-            {
-                if (col.gameObject != gameObject && col.GetComponent<PreyBoid>() != null)
-                {
-                    CalculateNeighborBoid(col);
-                }
+                CalculateNeighborBoid(col);
             }
         }
     }

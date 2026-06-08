@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 public class Boid : MonoBehaviour
@@ -35,9 +34,6 @@ public class Boid : MonoBehaviour
     protected Vector3 acceleration;
     protected int neighborCount;
 
-    protected List<PreyBoid> tempPreyNeighbors = new List<PreyBoid>();
-    protected List<PredatorBoid> tempPredatorNeighbors = new List<PredatorBoid>();
-
     protected virtual void OnEnable()
     {
         ActiveBoids.Add(this);
@@ -65,39 +61,13 @@ public class Boid : MonoBehaviour
 
     protected virtual void FindNeighbors()
     {
-        if (BoidSystemManager.Instance != null && BoidSystemManager.Instance.useSpatialHash)
-        {
-            BoidSystemManager.Instance.Grid.GetPreyNeighbors(transform.position, neighborRadius, tempPreyNeighbors);
-            int preyCount = tempPreyNeighbors.Count;
-            for (int i = 0; i < preyCount; i++)
-            {
-                PreyBoid neighbor = tempPreyNeighbors[i];
-                if (neighbor.gameObject != gameObject)
-                {
-                    CalculateNeighborBoid(neighbor);
-                }
-            }
+        Collider[] neighbors = Physics.OverlapSphere(transform.position, neighborRadius);
 
-            BoidSystemManager.Instance.Grid.GetPredatorNeighbors(transform.position, neighborRadius, tempPredatorNeighbors);
-            int predCount = tempPredatorNeighbors.Count;
-            for (int i = 0; i < predCount; i++)
-            {
-                PredatorBoid neighbor = tempPredatorNeighbors[i];
-                if (neighbor.gameObject != gameObject)
-                {
-                    CalculateNeighborBoid(neighbor);
-                }
-            }
-        }
-        else
+        foreach (Collider col in neighbors)
         {
-            Collider[] neighbors = Physics.OverlapSphere(transform.position, neighborRadius);
-            foreach (Collider col in neighbors)
+            if (col.gameObject != gameObject && col.CompareTag("Boid"))
             {
-                if (col.gameObject != gameObject && col.CompareTag("Boid"))
-                {
-                    CalculateNeighborBoid(col);
-                }
+                CalculateNeighborBoid(col);
             }
         }
     }
@@ -178,17 +148,6 @@ public class Boid : MonoBehaviour
         cohesionPos = Vector3.zero;
         acceleration = Vector3.zero;
         neighborCount = 0;
-    }
-
-    protected virtual void CalculateNeighborBoid(Boid neighbor)
-    {
-        Vector3 separationDir = transform.position - neighbor.transform.position;
-        float distance = separationDir.magnitude;
-
-        separationVector += separationDir.normalized * (1f - (distance / neighborRadius));
-        directionVector += neighbor.transform.forward;
-        cohesionPos += neighbor.transform.position;
-        neighborCount++;
     }
 
     protected virtual void CalculateNeighborBoid(Collider col)
