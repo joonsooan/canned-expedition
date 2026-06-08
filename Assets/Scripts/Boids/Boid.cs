@@ -30,11 +30,11 @@ public class Boid : MonoBehaviour
     private Vector3 velocity;
     private Vector3 acceleration;
     private int neighborCount;
+    private float neighborSqrRadius;
     private Transform myTransform;
-    private Collider[] neighborBuffer = new Collider[64];
 
-    public Vector3 Position { get; private set; }
-    public Vector3 ForwardVec { get; private set; }
+    public Vector3 Position;
+    public Vector3 ForwardVec;
 
     void Awake()
     {
@@ -53,6 +53,7 @@ public class Boid : MonoBehaviour
 
     void Start()
     {
+        neighborSqrRadius = neighborRadius * neighborRadius;
         Position = myTransform.position;
         ForwardVec = myTransform.forward;
 
@@ -74,17 +75,39 @@ public class Boid : MonoBehaviour
 
     private void FindNeighbors()
     {
-        int count = Physics.OverlapSphereNonAlloc(Position, neighborRadius, neighborBuffer);
+        int count = ActiveBoids.Count;
+        float myPosX = Position.x;
+        float myPosY = Position.y;
+        float myPosZ = Position.z;
 
         for (int i = 0; i < count; i++)
         {
-            Collider col = neighborBuffer[i];
-            if (col.gameObject != gameObject && col.CompareTag("Boid"))
+            Boid neighbor = ActiveBoids[i];
+            if (ReferenceEquals(neighbor, this))
             {
-                Boid neighbor = col.GetComponent<Boid>();
-                CalculateNeighborBoid(neighbor);
+                continue;
+            }
+
+            float dx = neighbor.Position.x - myPosX;
+            float dy = neighbor.Position.y - myPosY;
+            float dz = neighbor.Position.z - myPosZ;
+            float sqrDst = dx * dx + dy * dy + dz * dz;
+            if (sqrDst < neighborSqrRadius)
+            {
+                CalculateNeighborBoidDirect(neighbor, sqrDst);
             }
         }
+    }
+
+    private void CalculateNeighborBoidDirect(Boid neighbor, float sqrDst)
+    {
+        float distance = Mathf.Sqrt(sqrDst);
+
+        Vector3 separationDir = Position - neighbor.Position;
+        separationVector += separationDir / distance * (1f - (distance / neighborRadius));
+        directionVector += neighbor.ForwardVec;
+        cohesionPos += neighbor.Position;
+        neighborCount++;
     }
 
     private void ApplyNewBehavior()
