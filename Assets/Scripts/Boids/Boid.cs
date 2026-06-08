@@ -1,8 +1,9 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class Boid : MonoBehaviour
 {
-    public static readonly System.Collections.Generic.List<Boid> ActiveBoids = new System.Collections.Generic.List<Boid>();
+    public static readonly List<Boid> ActiveBoids = new List<Boid>();
 
     [Header("Boid Settings")]
     public float speed = 5f;
@@ -29,6 +30,16 @@ public class Boid : MonoBehaviour
     private Vector3 velocity;
     private Vector3 acceleration;
     private int neighborCount;
+    private Transform myTransform;
+    private Collider[] neighborBuffer = new Collider[64];
+
+    public Vector3 Position { get; private set; }
+    public Vector3 ForwardVec { get; private set; }
+
+    void Awake()
+    {
+        myTransform = transform;
+    }
 
     void OnEnable()
     {
@@ -42,12 +53,18 @@ public class Boid : MonoBehaviour
 
     void Start()
     {
-        velocity = transform.forward * speed;
+        Position = myTransform.position;
+        ForwardVec = myTransform.forward;
+
+        velocity = ForwardVec * speed;
         SetRandomColor();
     }
 
     void Update()
     {
+        Position = myTransform.position;
+        ForwardVec = myTransform.forward;
+
         InitializeBoid();
         FindNeighbors();
         ApplyNewBehavior();
@@ -57,13 +74,15 @@ public class Boid : MonoBehaviour
 
     private void FindNeighbors()
     {
-        Collider[] neighbors = Physics.OverlapSphere(transform.position, neighborRadius);
+        int count = Physics.OverlapSphereNonAlloc(Position, neighborRadius, neighborBuffer);
 
-        foreach (Collider col in neighbors)
+        for (int i = 0; i < count; i++)
         {
+            Collider col = neighborBuffer[i];
             if (col.gameObject != gameObject && col.CompareTag("Boid"))
             {
-                CalculateNeighborBoid(col);
+                Boid neighbor = col.GetComponent<Boid>();
+                CalculateNeighborBoid(neighbor);
             }
         }
     }
@@ -76,7 +95,7 @@ public class Boid : MonoBehaviour
         }
         else
         {
-            acceleration += transform.forward * 0.5f;
+            acceleration += ForwardVec * 0.5f;
         }
     }
 
@@ -112,10 +131,10 @@ public class Boid : MonoBehaviour
         if (velocity != Vector3.zero)
         {
             Quaternion targetRotation = Quaternion.LookRotation(velocity);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+            myTransform.rotation = Quaternion.Slerp(myTransform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
         }
 
-        transform.position += velocity * Time.deltaTime;
+        myTransform.position += velocity * Time.deltaTime;
     }
 
     private void SetRandomColor()
@@ -144,14 +163,14 @@ public class Boid : MonoBehaviour
         neighborCount = 0;
     }
 
-    private void CalculateNeighborBoid(Collider col)
+    private void CalculateNeighborBoid(Boid neighbor)
     {
-        Vector3 separationDir = transform.position - col.transform.position;
+        Vector3 separationDir = Position - neighbor.Position;
         float distance = separationDir.magnitude;
 
         separationVector += separationDir.normalized * (1f - (distance / neighborRadius));
-        directionVector += col.transform.forward;
-        cohesionPos += col.transform.position;
+        directionVector += neighbor.ForwardVec;
+        cohesionPos += neighbor.Position;
         neighborCount++;
     }
 
@@ -161,7 +180,7 @@ public class Boid : MonoBehaviour
         if (directionVector != Vector3.zero) directionVector = directionVector.normalized;
 
         Vector3 averageCohesionPos = cohesionPos / neighborCount;
-        cohesionVector = averageCohesionPos - transform.position;
+        cohesionVector = averageCohesionPos - Position;
         if (cohesionVector != Vector3.zero) cohesionVector = cohesionVector.normalized;
 
         acceleration += (separationVector * separationWeight) +
@@ -172,9 +191,9 @@ public class Boid : MonoBehaviour
     private bool IsHeadingForCollision()
     {
         RaycastHit hit;
-        Vector3 moveDir = velocity != Vector3.zero ? velocity.normalized : transform.forward;
+        Vector3 moveDir = velocity != Vector3.zero ? velocity.normalized : ForwardVec;
 
-        if (Physics.SphereCast(transform.position, boundsRadius, moveDir, out hit, collisionAvoidDst, obstacleMask))
+        if (Physics.SphereCast(Position, boundsRadius, moveDir, out hit, collisionAvoidDst, obstacleMask))
         {
             return true;
         }
@@ -192,17 +211,17 @@ public class Boid : MonoBehaviour
         }
         else
         {
-            moveDir = transform.forward;
+            moveDir = ForwardVec;
         }
 
-        if (Physics.SphereCast(transform.position, boundsRadius, moveDir, out hit, collisionAvoidDst, obstacleMask))
+        if (Physics.SphereCast(Position, boundsRadius, moveDir, out hit, collisionAvoidDst, obstacleMask))
         {
             distance = hit.distance;
             avoidDir = ObstacleRays();
             return true;
         }
 
-        avoidDir = transform.forward;
+        avoidDir = ForwardVec;
         distance = collisionAvoidDst;
         return false;
     }
@@ -215,14 +234,14 @@ public class Boid : MonoBehaviour
         for (int i = 0; i < rayDirections.Length; i++)
         {
             Vector3 dir = lookRotation * rayDirections[i];
-            Ray ray = new Ray(transform.position, dir);
+            Ray ray = new Ray(Position, dir);
             if (!Physics.SphereCast(ray, boundsRadius, collisionAvoidDst, obstacleMask))
             {
                 return dir;
             }
         }
 
-        return transform.forward;
+        return ForwardVec;
     }
 
     private Vector3 SteerTowards(Vector3 vector)
