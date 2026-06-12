@@ -186,17 +186,6 @@ public class Boid : MonoBehaviour
         neighborCount = 0;
     }
 
-    private void CalculateNeighborBoid(Boid neighbor)
-    {
-        Vector3 separationDir = Position - neighbor.Position;
-        float distance = separationDir.magnitude;
-
-        separationVector += separationDir.normalized * (1f - (distance / neighborRadius));
-        directionVector += neighbor.ForwardVec;
-        cohesionPos += neighbor.Position;
-        neighborCount++;
-    }
-
     private void CalculateMoveVector()
     {
         if (separationVector != Vector3.zero) separationVector = separationVector.normalized;
@@ -258,6 +247,7 @@ public class Boid : MonoBehaviour
         {
             Vector3 dir = lookRotation * rayDirections[i];
             Ray ray = new Ray(Position, dir);
+            // 정면과 가장 가까운 방향부터 검사하여 충돌이 없는 첫 번째 방향을 반환
             if (!Physics.SphereCast(ray, boundsRadius, collisionAvoidDst, obstacleMask))
             {
                 return dir;

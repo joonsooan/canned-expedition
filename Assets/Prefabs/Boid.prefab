@@ -126,9 +126,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 02f2d472368fe824db1cc668a32b8072, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Boid
-  speed: 30
+  speed: 40
   rotationSpeed: 30
-  neighborRadius: 15
+  neighborRadius: 10
   separationWeight: 3
   alignmentWeight: 2
   cohesionWeight: 3
@@ -140,6 +140,8 @@ MonoBehaviour:
   avoidCollisionWeight: 10
   maxBoundsSpeed: 15
   maxSteerForce: 5
+  Position: {x: 0, y: 0, z: 0}
+  ForwardVec: {x: 0, y: 0, z: 0}
 --- !u!1001 &3820412296178216972
 PrefabInstance:
   m_ObjectHideFlags: 0

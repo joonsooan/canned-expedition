@@ -196,7 +196,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BoidSpawner
   boidPrefab: {fileID: 7894937908069487596, guid: 56aa24eb0d2b80048a0a01fba1581364, type: 3}
   boidParent: {fileID: 40389659}
-  spawnCount: 2000
+  spawnCount: 500
   spawnRadius: 40
 --- !u!1 &156467798
 GameObject:
@@ -965,7 +965,7 @@ MonoBehaviour:
   m_ShowCameraFrustum: 1
   m_IgnoreTimeScale: 0
   m_WorldUpOverride: {fileID: 0}
-  m_UpdateMethod: 2
+  m_UpdateMethod: 1
   m_BlendUpdateMethod: 1
   m_DefaultBlend:
     m_Style: 1
