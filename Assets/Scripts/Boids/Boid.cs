@@ -32,6 +32,7 @@ public class Boid : MonoBehaviour
     private int neighborCount;
     private float neighborSqrRadius;
     private Transform myTransform;
+    private readonly List<Boid> neighborBuffer = new List<Boid>();
 
     public Vector3 Position;
     public Vector3 ForwardVec;
@@ -75,14 +76,18 @@ public class Boid : MonoBehaviour
 
     private void FindNeighbors()
     {
-        int count = ActiveBoids.Count;
+        BoidSystem.EnsureGridBuilt();
+        neighborBuffer.Clear();
+        BoidSystem.SpatialHash.GetNeighbors(this, neighborBuffer);
+
+        int count = neighborBuffer.Count;
         float myPosX = Position.x;
         float myPosY = Position.y;
         float myPosZ = Position.z;
 
         for (int i = 0; i < count; i++)
         {
-            Boid neighbor = ActiveBoids[i];
+            Boid neighbor = neighborBuffer[i];
             if (ReferenceEquals(neighbor, this))
             {
                 continue;

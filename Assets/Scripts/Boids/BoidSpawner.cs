@@ -29,6 +29,19 @@ public class BoidSpawner : MonoBehaviour
         }
     }
 
+    [Header("Gizmo Settings")]
+    public bool drawGridGizmos = true;
+
+    private void OnDrawGizmos()
+    {
+        if (!drawGridGizmos) return;
+
+        if (Application.isPlaying && BoidSystem.SpatialHash != null)
+        {
+            BoidSystem.SpatialHash.DrawGridGizmos();
+        }
+    }
+
     private void OnDrawGizmosSelected()
     {
         Gizmos.color = Color.green;

@@ -196,8 +196,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BoidSpawner
   boidPrefab: {fileID: 7894937908069487596, guid: 56aa24eb0d2b80048a0a01fba1581364, type: 3}
   boidParent: {fileID: 40389659}
-  spawnCount: 500
+  spawnCount: 1000
   spawnRadius: 40
+  drawGridGizmos: 1
 --- !u!1 &156467798
 GameObject:
   m_ObjectHideFlags: 0
