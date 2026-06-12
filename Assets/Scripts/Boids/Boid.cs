@@ -34,8 +34,8 @@ public class Boid : MonoBehaviour
     private Transform myTransform;
     private readonly List<Boid> neighborBuffer = new List<Boid>();
 
-    public Vector3 Position;
-    public Vector3 ForwardVec;
+    [HideInInspector] public Vector3 Position;
+    [HideInInspector] public Vector3 ForwardVec;
 
     void Awake()
     {
