@@ -16,6 +16,7 @@ public class BoidCameraController : MonoBehaviour
     private Boid targetBoid;
     private bool isFollowing = false;
     private CinemachineTransposer transposer;
+    private Transform cameraFollowTarget;
 
     void Start()
     {
@@ -26,6 +27,17 @@ public class BoidCameraController : MonoBehaviour
         {
             transposer = boidVirtualCamera.GetCinemachineComponent<CinemachineTransposer>();
             boidVirtualCamera.enabled = false;
+        }
+
+        GameObject targetGo = new GameObject("CameraFollowTarget");
+        cameraFollowTarget = targetGo.transform;
+    }
+
+    void OnDestroy()
+    {
+        if (cameraFollowTarget != null)
+        {
+            Destroy(cameraFollowTarget.gameObject);
         }
     }
 
@@ -48,6 +60,10 @@ public class BoidCameraController : MonoBehaviour
         {
             if (targetBoid != null)
             {
+                float t = 1f - Mathf.Exp(-smoothSpeed * Time.deltaTime);
+                cameraFollowTarget.position = Vector3.Lerp(cameraFollowTarget.position, targetBoid.transform.position, t);
+                cameraFollowTarget.rotation = Quaternion.Slerp(cameraFollowTarget.rotation, targetBoid.transform.rotation, t);
+
                 if (transposer != null)
                 {
                     transposer.m_FollowOffset = offset;
@@ -75,6 +91,10 @@ public class BoidCameraController : MonoBehaviour
     private void SelectRandomBoid()
     {
         var allBoids = Boid.ActiveBoids;
+        if (allBoids == null || allBoids.Count == 0)
+        {
+            return;
+        }
 
         if (allBoids.Count == 1)
         {
@@ -96,10 +116,16 @@ public class BoidCameraController : MonoBehaviour
             targetBoid = nextBoid;
         }
 
-        boidVirtualCamera.Follow = targetBoid.transform;
-        boidVirtualCamera.LookAt = targetBoid.transform;
-        boidVirtualCamera.enabled = true;
-        isFollowing = true;
+        if (targetBoid != null)
+        {
+            cameraFollowTarget.position = targetBoid.transform.position;
+            cameraFollowTarget.rotation = targetBoid.transform.rotation;
+
+            boidVirtualCamera.Follow = cameraFollowTarget;
+            boidVirtualCamera.LookAt = cameraFollowTarget;
+            boidVirtualCamera.enabled = true;
+            isFollowing = true;
+        }
     }
 
     private void ReturnToInitialPosition()

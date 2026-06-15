@@ -196,7 +196,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BoidSpawner
   boidPrefab: {fileID: 7894937908069487596, guid: 56aa24eb0d2b80048a0a01fba1581364, type: 3}
   boidParent: {fileID: 40389659}
-  spawnCount: 300
+  spawnCount: 500
   spawnRadius: 10
   drawGridGizmos: 1
 --- !u!1 &159935631
@@ -950,8 +950,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BoidCameraController
   boidVirtualCamera: {fileID: 987431614}
-  offset: {x: 0, y: 3, z: -10}
-  smoothSpeed: 10
+  offset: {x: 0, y: 3, z: -5}
+  smoothSpeed: 2
 --- !u!114 &764643637
 MonoBehaviour:
   m_ObjectHideFlags: 0

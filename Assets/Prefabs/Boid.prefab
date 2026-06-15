@@ -126,9 +126,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 02f2d472368fe824db1cc668a32b8072, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Boid
-  speed: 30
-  rotationSpeed: 40
-  neighborRadius: 15
+  speed: 20
+  rotationSpeed: 30
+  neighborRadius: 10
   separationWeight: 3
   alignmentWeight: 2
   cohesionWeight: 3

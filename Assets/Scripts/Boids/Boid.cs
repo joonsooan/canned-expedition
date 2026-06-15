@@ -32,7 +32,6 @@ public class Boid : MonoBehaviour
     private int neighborCount;
     private float neighborSqrRadius;
     private Transform myTransform;
-    private readonly List<Boid> neighborBuffer = new List<Boid>();
 
     [HideInInspector] public Vector3 Position;
     [HideInInspector] public Vector3 ForwardVec;
@@ -77,42 +76,15 @@ public class Boid : MonoBehaviour
     private void FindNeighbors()
     {
         BoidSystem.EnsureGridBuilt();
-        neighborBuffer.Clear();
-        BoidSystem.SpatialHash.GetNeighbors(this, neighborBuffer);
-
-        int count = neighborBuffer.Count;
-        float myPosX = Position.x;
-        float myPosY = Position.y;
-        float myPosZ = Position.z;
-
-        for (int i = 0; i < count; i++)
-        {
-            Boid neighbor = neighborBuffer[i];
-            if (ReferenceEquals(neighbor, this))
-            {
-                continue;
-            }
-
-            float dx = neighbor.Position.x - myPosX;
-            float dy = neighbor.Position.y - myPosY;
-            float dz = neighbor.Position.z - myPosZ;
-            float sqrDst = dx * dx + dy * dy + dz * dz;
-            if (sqrDst < neighborSqrRadius)
-            {
-                CalculateNeighborBoidDirect(neighbor, sqrDst);
-            }
-        }
-    }
-
-    private void CalculateNeighborBoidDirect(Boid neighbor, float sqrDst)
-    {
-        float distance = Mathf.Sqrt(sqrDst);
-
-        Vector3 separationDir = Position - neighbor.Position;
-        separationVector += separationDir / distance * (1f - (distance / neighborRadius));
-        directionVector += neighbor.ForwardVec;
-        cohesionPos += neighbor.Position;
-        neighborCount++;
+        BoidSystem.SpatialHash.ProcessNeighbors(
+            this,
+            neighborSqrRadius,
+            neighborRadius,
+            ref separationVector,
+            ref directionVector,
+            ref cohesionPos,
+            ref neighborCount
+        );
     }
 
     private void ApplyNewBehavior()
@@ -129,18 +101,17 @@ public class Boid : MonoBehaviour
 
     private void HandleObstacleAvoiding()
     {
-        if (IsHeadingForCollision())
+        RaycastHit hit;
+        Vector3 moveDir = velocity != Vector3.zero ? velocity.normalized : ForwardVec;
+
+        if (Physics.SphereCast(Position, boundsRadius, moveDir, out hit, collisionAvoidDst, obstacleMask))
         {
-            Vector3 collisionAvoidDir;
-            float distanceToObstacle;
+            float distanceToObstacle = hit.distance;
+            Vector3 collisionAvoidDir = ObstacleRays();
+            float proximityFactor = 1f - (distanceToObstacle / collisionAvoidDst);
+            Vector3 collisionAvoidForce = SteerTowards(collisionAvoidDir) * avoidCollisionWeight * (1f + proximityFactor * 2f);
 
-            if (GetObstacleDistance(out collisionAvoidDir, out distanceToObstacle))
-            {
-                float proximityFactor = 1f - (distanceToObstacle / collisionAvoidDst);
-                Vector3 collisionAvoidForce = SteerTowards(collisionAvoidDir) * avoidCollisionWeight * (1f + proximityFactor * 2f);
-
-                acceleration += collisionAvoidForce;
-            }
+            acceleration += collisionAvoidForce;
         }
     }
 
@@ -148,9 +119,10 @@ public class Boid : MonoBehaviour
     {
         velocity += acceleration * Time.deltaTime;
 
-        float currentSpeed = velocity.magnitude;
-        if (currentSpeed > 0f)
+        float sqrSpeed = velocity.sqrMagnitude;
+        if (sqrSpeed > 0f)
         {
+            float currentSpeed = Mathf.Sqrt(sqrSpeed);
             Vector3 dir = velocity / currentSpeed;
             currentSpeed = Mathf.Clamp(currentSpeed, speed * 0.5f, maxBoundsSpeed);
             velocity = dir * currentSpeed;
@@ -205,43 +177,7 @@ public class Boid : MonoBehaviour
                         (cohesionVector * cohesionWeight);
     }
 
-    private bool IsHeadingForCollision()
-    {
-        RaycastHit hit;
-        Vector3 moveDir = velocity != Vector3.zero ? velocity.normalized : ForwardVec;
 
-        if (Physics.SphereCast(Position, boundsRadius, moveDir, out hit, collisionAvoidDst, obstacleMask))
-        {
-            return true;
-        }
-        return false;
-    }
-
-    private bool GetObstacleDistance(out Vector3 avoidDir, out float distance)
-    {
-        RaycastHit hit;
-        Vector3 moveDir;
-
-        if (velocity != Vector3.zero)
-        {
-            moveDir = velocity.normalized;
-        }
-        else
-        {
-            moveDir = ForwardVec;
-        }
-
-        if (Physics.SphereCast(Position, boundsRadius, moveDir, out hit, collisionAvoidDst, obstacleMask))
-        {
-            distance = hit.distance;
-            avoidDir = ObstacleRays();
-            return true;
-        }
-
-        avoidDir = ForwardVec;
-        distance = collisionAvoidDst;
-        return false;
-    }
 
     private Vector3 ObstacleRays()
     {
