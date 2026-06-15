@@ -126,20 +126,25 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 02f2d472368fe824db1cc668a32b8072, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Boid
-  speed: 20
-  rotationSpeed: 30
+  speed: 5
+  rotationSpeed: 20
   neighborRadius: 10
-  separationWeight: 3
+  setRandomColor: 0
+  separationWeight: 4
   alignmentWeight: 2
   cohesionWeight: 3
   obstacleMask:
     serializedVersion: 2
     m_Bits: 128
   boundsRadius: 0.5
-  collisionAvoidDst: 20
-  avoidCollisionWeight: 10
-  maxBoundsSpeed: 15
+  collisionAvoidDst: 10
+  avoidCollisionWeight: 5
+  maxBoundsSpeed: 5
   maxSteerForce: 10
+  jobSeparation: {x: 0, y: 0, z: 0}
+  jobAlignment: {x: 0, y: 0, z: 0}
+  jobCohesion: {x: 0, y: 0, z: 0}
+  jobNeighborCount: 0
   Position: {x: 0, y: 0, z: 0}
   ForwardVec: {x: 0, y: 0, z: 0}
 --- !u!1001 &3820412296178216972

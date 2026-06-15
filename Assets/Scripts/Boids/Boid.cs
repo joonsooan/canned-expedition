@@ -9,6 +9,7 @@ public class Boid : MonoBehaviour
     public float speed = 5f;
     public float rotationSpeed = 5f;
     public float neighborRadius = 5f;
+    public bool setRandomColor = true;
 
     [Header("Behavior Weights")]
     public float separationWeight = 1f;
@@ -63,7 +64,7 @@ public class Boid : MonoBehaviour
         ForwardVec = myTransform.forward;
 
         velocity = ForwardVec * speed;
-        SetRandomColor();
+        if (setRandomColor) SetRandomColor();
     }
 
     void Update()
@@ -72,7 +73,7 @@ public class Boid : MonoBehaviour
         ForwardVec = myTransform.forward;
 
         InitializeBoid();
-        
+
         // Read forces calculated by the multithreaded Burst job
         separationVector = jobSeparation;
         directionVector = jobAlignment;
