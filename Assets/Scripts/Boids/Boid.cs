@@ -33,6 +33,11 @@ public class Boid : MonoBehaviour
     private float neighborSqrRadius;
     private Transform myTransform;
 
+    [HideInInspector] public Vector3 jobSeparation;
+    [HideInInspector] public Vector3 jobAlignment;
+    [HideInInspector] public Vector3 jobCohesion;
+    [HideInInspector] public int jobNeighborCount;
+
     [HideInInspector] public Vector3 Position;
     [HideInInspector] public Vector3 ForwardVec;
 
@@ -67,24 +72,16 @@ public class Boid : MonoBehaviour
         ForwardVec = myTransform.forward;
 
         InitializeBoid();
-        FindNeighbors();
+        
+        // Read forces calculated by the multithreaded Burst job
+        separationVector = jobSeparation;
+        directionVector = jobAlignment;
+        cohesionPos = jobCohesion;
+        neighborCount = jobNeighborCount;
+
         ApplyNewBehavior();
         HandleObstacleAvoiding();
         UpdateMovement();
-    }
-
-    private void FindNeighbors()
-    {
-        BoidSystem.EnsureGridBuilt();
-        BoidSystem.SpatialHash.ProcessNeighbors(
-            this,
-            neighborSqrRadius,
-            neighborRadius,
-            ref separationVector,
-            ref directionVector,
-            ref cohesionPos,
-            ref neighborCount
-        );
     }
 
     private void ApplyNewBehavior()
