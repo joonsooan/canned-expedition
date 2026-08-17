@@ -18,6 +18,8 @@ public class PlayerPlayable : MonoBehaviour
     [Header("Player Settings")]
     public float walkSpeed = 2.0f;
     public float runSpeed = 5.0f;
+    public float rotateSpeed = 10.0f;
+    public float transitionSpeed = 10.0f;
     public float jumpForce = 5.0f;
     public float gravity = -9.81f;
 
@@ -50,7 +52,11 @@ public class PlayerPlayable : MonoBehaviour
     private enum JumpState { JumpStart, InAir, JumpLand }
     private enum LandingState { WalkNLand, RunNLand }
 
+    private RootState currentRootState;
+    private MoveState currentMoveState;
     private JumpState currentJumpState;
+    private LandingState currentLandingState;
+
     private bool isJumping;
     private bool isLanding;
     private float verticalVelocity;
@@ -106,6 +112,9 @@ public class PlayerPlayable : MonoBehaviour
         SetLandingState(LandingState.WalkNLand);
         SetRootState(RootState.Move);
 
+        rootMixer.SetInputWeight((int)RootState.Move, 1f);
+        moveMixer.SetInputWeight((int)MoveState.Idle, 1f);
+
         graph.Play();
     }
 
@@ -118,14 +127,25 @@ public class PlayerPlayable : MonoBehaviour
         {
             UpdateLanding();
         }
+
+        UpdateMixerWeights();
     }
 
     private void HandleMovement()
     {
         float horizontal = Input.GetAxisRaw("Horizontal");
-        bool isWalking = Mathf.Abs(horizontal) > 0.1f;
-        bool isRunning = Input.GetKey(KeyCode.LeftShift) && isWalking;
+        float vertical = Input.GetAxisRaw("Vertical");
+        Vector3 inputDir = new Vector3(horizontal, 0, vertical).normalized;
+
+        bool isMoving = inputDir.sqrMagnitude > 0.01f;
+        bool isRunning = Input.GetKey(KeyCode.LeftShift) && isMoving;
         bool isGrounded = controller.isGrounded;
+
+        if (isMoving)
+        {
+            Quaternion targetRotation = Quaternion.LookRotation(inputDir);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotateSpeed * Time.deltaTime);
+        }
 
         if (isGrounded && verticalVelocity < 0f)
         {
@@ -135,8 +155,8 @@ public class PlayerPlayable : MonoBehaviour
         verticalVelocity += gravity * Time.deltaTime;
 
         float speed = isRunning ? runSpeed : walkSpeed;
-        Vector3 move = new Vector3(horizontal * speed, verticalVelocity, 0);
-        controller.Move(move * Time.deltaTime);
+        Vector3 velocity = inputDir * speed + Vector3.up * verticalVelocity;
+        controller.Move(velocity * Time.deltaTime);
 
         // Don't update move state if jumping or landing
         if (isJumping || isLanding)
@@ -150,20 +170,13 @@ public class PlayerPlayable : MonoBehaviour
             return;
         }
 
-        if (!isWalking)
+        if (!isMoving)
         {
             SetMoveState(MoveState.Idle);
         }
         else if (isRunning)
         {
-            if (horizontal > 0f)
-            {
-                SetMoveState(MoveState.RunN);
-            }
-            else
-            {
-                SetMoveState(MoveState.RunS);
-            }
+            SetMoveState(MoveState.RunN);
         }
         else
         {
@@ -193,7 +206,6 @@ public class PlayerPlayable : MonoBehaviour
     {
         isJumping = true;
         verticalVelocity = jumpForce;
-        currentJumpState = JumpState.JumpStart;
 
         SetRootState(RootState.Jump);
         SetJumpState(JumpState.JumpStart);
@@ -204,28 +216,27 @@ public class PlayerPlayable : MonoBehaviour
         switch (currentJumpState)
         {
             case JumpState.JumpStart:
-                if (IsClipFinished(jumpStartPlayable))
+                if (IsClipFinished(jumpStartPlayable) || !isGrounded)
                 {
-                    currentJumpState = JumpState.InAir;
                     SetJumpState(JumpState.InAir);
                 }
 
                 break;
 
             case JumpState.InAir:
-                if (isGrounded)
+                if (isGrounded && verticalVelocity <= 0f)
                 {
-                    currentJumpState = JumpState.JumpLand;
                     SetJumpState(JumpState.JumpLand);
                 }
 
                 break;
 
             case JumpState.JumpLand:
-                if (IsClipFinished(jumpLandPlayable))
+                if (IsClipFinished(jumpLandPlayable) || jumpLandPlayable.GetTime() >= 1f)
                 {
                     isJumping = false;
-                    StartLanding();
+                    isLanding = false;
+                    SetRootState(RootState.Move);
                 }
 
                 break;
@@ -236,110 +247,110 @@ public class PlayerPlayable : MonoBehaviour
     {
         isLanding = true;
         SetRootState(RootState.Landing);
-        bool isRunning = Input.GetKey(KeyCode.LeftShift) && Mathf.Abs(Input.GetAxisRaw("Horizontal")) > 0.1f;
-
-        if (isRunning)
-        {
-            SetLandingState(LandingState.RunNLand);
-        }
-        else
-        {
-            SetLandingState(LandingState.WalkNLand);
-        }
     }
 
     private void UpdateLanding()
     {
-        AnimationClipPlayable activePlayable;
-
-        if (landingMixer.GetInputWeight((int)LandingState.RunNLand) > 0.5f)
-        {
-            activePlayable = runNLandPlayable;
-        }
-        else
-        {
-            activePlayable = walkNLandPlayable;
-        }
-
-        if (!IsClipFinished(activePlayable))
-        {
-            return;
-        }
-
         isLanding = false;
         SetRootState(RootState.Move);
     }
 
     private void SetRootState(RootState state)
     {
-        for (int i = 0; i < rootMixer.GetInputCount(); i++)
-        {
-            rootMixer.SetInputWeight(i, i == (int)state ? 1f : 0f);
-        }
+        currentRootState = state;
     }
 
     private void SetMoveState(MoveState state)
     {
-        for (int i = 0; i < moveMixer.GetInputCount(); i++)
-        {
-            moveMixer.SetInputWeight(i, i == (int)state ? 1f : 0f);
-        }
+        currentMoveState = state;
     }
 
     private void SetJumpState(JumpState state)
     {
-        for (int i = 0; i < jumpMixer.GetInputCount(); i++)
-        {
-            jumpMixer.SetInputWeight(i, i == (int)state ? 1f : 0f);
-        }
-
+        currentJumpState = state;
         ResetClipTime(state);
-    }
-
-    private void ResetClipTime(JumpState state)
-    {
-        switch (state)
-        {
-            case JumpState.JumpStart:
-                jumpStartPlayable.SetTime(0);
-                break;
-
-            case JumpState.InAir:
-                inAirPlayable.SetTime(0);
-                break;
-
-            case JumpState.JumpLand:
-                jumpLandPlayable.SetTime(0);
-                break;
-        }
     }
 
     private void SetLandingState(LandingState state)
     {
-        for (int i = 0; i < landingMixer.GetInputCount(); i++)
+        currentLandingState = state;
+        ResetLandingClipTime(state);
+    }
+
+    private void UpdateMixerWeights()
+    {
+        float blendStep = Time.deltaTime * transitionSpeed;
+
+        for (int i = 0; i < rootMixer.GetInputCount(); i++)
         {
-            landingMixer.SetInputWeight(i, i == (int)state ? 1f : 0f);
+            float targetWeight = (i == (int)currentRootState) ? 1f : 0f;
+            float currentWeight = rootMixer.GetInputWeight(i);
+            rootMixer.SetInputWeight(i, Mathf.MoveTowards(currentWeight, targetWeight, blendStep));
         }
 
-        ResetLandingClipTime(state);
+        for (int i = 0; i < moveMixer.GetInputCount(); i++)
+        {
+            float targetWeight = (i == (int)currentMoveState) ? 1f : 0f;
+            float currentWeight = moveMixer.GetInputWeight(i);
+            moveMixer.SetInputWeight(i, Mathf.MoveTowards(currentWeight, targetWeight, blendStep));
+        }
+
+        for (int i = 0; i < jumpMixer.GetInputCount(); i++)
+        {
+            float targetWeight = (i == (int)currentJumpState) ? 1f : 0f;
+            float currentWeight = jumpMixer.GetInputWeight(i);
+            jumpMixer.SetInputWeight(i, Mathf.MoveTowards(currentWeight, targetWeight, blendStep));
+        }
+
+        for (int i = 0; i < landingMixer.GetInputCount(); i++)
+        {
+            float targetWeight = (i == (int)currentLandingState) ? 1f : 0f;
+            float currentWeight = landingMixer.GetInputWeight(i);
+            landingMixer.SetInputWeight(i, Mathf.MoveTowards(currentWeight, targetWeight, blendStep));
+        }
+    }
+
+    private void ResetClipTime(JumpState state)
+    {
+        AnimationClipPlayable playable = default;
+
+        switch (state)
+        {
+            case JumpState.JumpStart: playable = jumpStartPlayable; break;
+            case JumpState.InAir: playable = inAirPlayable; break;
+            case JumpState.JumpLand: playable = jumpLandPlayable; break;
+        }
+
+        if (playable.IsValid())
+        {
+            playable.SetTime(0);
+            playable.SetDone(false);
+            playable.Play();
+        }
     }
 
     private void ResetLandingClipTime(LandingState state)
     {
+        AnimationClipPlayable playable = default;
+
         switch (state)
         {
-            case LandingState.WalkNLand:
-                walkNLandPlayable.SetTime(0);
-                break;
+            case LandingState.WalkNLand: playable = walkNLandPlayable; break;
+            case LandingState.RunNLand: playable = runNLandPlayable; break;
+        }
 
-            case LandingState.RunNLand:
-                runNLandPlayable.SetTime(0);
-                break;
+        if (playable.IsValid())
+        {
+            playable.SetTime(0);
+            playable.SetDone(false);
+            playable.Play();
         }
     }
 
     private bool IsClipFinished(AnimationClipPlayable playable)
     {
+        if (!playable.IsValid()) return true;
+
         double duration = playable.GetDuration();
 
         if (duration <= 0)
@@ -352,6 +363,9 @@ public class PlayerPlayable : MonoBehaviour
 
     private void OnDestroy()
     {
-        graph.Destroy();
+        if (graph.IsValid())
+        {
+            graph.Destroy();
+        }
     }
 }
