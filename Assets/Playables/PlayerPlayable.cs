@@ -21,14 +21,39 @@ public class PlayerPlayable : MonoBehaviour
     public float jumpForce = 5.0f;
     public float gravity = -9.81f;
 
-    private const int numStates = 9;
-    private float[] weights = new float[numStates];
-
     private Animator animator;
     private CharacterController controller;
     private PlayableGraph graph;
-    private AnimationMixerPlayable mixer;
-    private enum PlayerState { Idle, WalkN, WalkNLand, RunN, RunNLand, RunS, JumpStart, InAir, JumpLand }
+
+    // Playable Mixers
+    private AnimationMixerPlayable rootMixer;
+    private AnimationMixerPlayable moveMixer;
+    private AnimationMixerPlayable jumpMixer;
+    private AnimationMixerPlayable landingMixer;
+
+    // Playable Clips
+    private AnimationClipPlayable idlePlayable;
+    private AnimationClipPlayable walkNPlayable;
+    private AnimationClipPlayable runNPlayable;
+    private AnimationClipPlayable runSPlayable;
+
+    private AnimationClipPlayable jumpStartPlayable;
+    private AnimationClipPlayable inAirPlayable;
+    private AnimationClipPlayable jumpLandPlayable;
+
+    private AnimationClipPlayable walkNLandPlayable;
+    private AnimationClipPlayable runNLandPlayable;
+
+    // States
+    private enum RootState { Move, Jump, Landing }
+    private enum MoveState { Idle, WalkN, RunN, RunS }
+    private enum JumpState { JumpStart, InAir, JumpLand }
+    private enum LandingState { WalkNLand, RunNLand }
+
+    private JumpState currentJumpState;
+    private bool isJumping;
+    private bool isLanding;
+    private float verticalVelocity;
 
     void Awake()
     {
@@ -39,118 +64,293 @@ public class PlayerPlayable : MonoBehaviour
     void Start()
     {
         graph = PlayableGraph.Create("PlayerPlayableGraph");
-        mixer = AnimationMixerPlayable.Create(graph, numStates);
+
+        // Create Mixers
+        rootMixer = AnimationMixerPlayable.Create(graph, 3);
+        moveMixer = AnimationMixerPlayable.Create(graph, 4);
+        jumpMixer = AnimationMixerPlayable.Create(graph, 3);
+        landingMixer = AnimationMixerPlayable.Create(graph, 2);
 
         // Create Clips
-        var clipPlayableIdle = AnimationClipPlayable.Create(graph, idleClip);
-        var clipPlayableWalkN = AnimationClipPlayable.Create(graph, walkNClip);
-        var clipPlayableWalkNLand = AnimationClipPlayable.Create(graph, walkNLandClip);
-        var clipPlayableRunN = AnimationClipPlayable.Create(graph, runNClip);
-        var clipPlayableRunNLand = AnimationClipPlayable.Create(graph, runNLandClip);
-        var clipPlayableRunS = AnimationClipPlayable.Create(graph, runSClip);
-        var clipPlayableJumpStart = AnimationClipPlayable.Create(graph, jumpStartClip);
-        var clipPlayableInAir = AnimationClipPlayable.Create(graph, inAirClip);
-        var clipPlayableJumpLand = AnimationClipPlayable.Create(graph, jumpLandClip);
+        idlePlayable = AnimationClipPlayable.Create(graph, idleClip);
+        walkNPlayable = AnimationClipPlayable.Create(graph, walkNClip);
+        runNPlayable = AnimationClipPlayable.Create(graph, runNClip);
+        runSPlayable = AnimationClipPlayable.Create(graph, runSClip);
+        jumpStartPlayable = AnimationClipPlayable.Create(graph, jumpStartClip);
+        inAirPlayable = AnimationClipPlayable.Create(graph, inAirClip);
+        jumpLandPlayable = AnimationClipPlayable.Create(graph, jumpLandClip);
+        walkNLandPlayable = AnimationClipPlayable.Create(graph, walkNLandClip);
+        runNLandPlayable = AnimationClipPlayable.Create(graph, runNLandClip);
 
         // Connect Clips
-        graph.Connect(clipPlayableIdle, 0, mixer, (int)PlayerState.Idle);
-        graph.Connect(clipPlayableWalkN, 0, mixer, (int)PlayerState.WalkN);
-        graph.Connect(clipPlayableWalkNLand, 0, mixer, (int)PlayerState.WalkNLand);
-        graph.Connect(clipPlayableRunN, 0, mixer, (int)PlayerState.RunN);
-        graph.Connect(clipPlayableRunNLand, 0, mixer, (int)PlayerState.RunNLand);
-        graph.Connect(clipPlayableRunS, 0, mixer, (int)PlayerState.RunS);
-        graph.Connect(clipPlayableJumpStart, 0, mixer, (int)PlayerState.JumpStart);
-        graph.Connect(clipPlayableInAir, 0, mixer, (int)PlayerState.InAir);
-        graph.Connect(clipPlayableJumpLand, 0, mixer, (int)PlayerState.JumpLand);
+        graph.Connect(idlePlayable, 0, moveMixer, (int)MoveState.Idle);
+        graph.Connect(walkNPlayable, 0, moveMixer, (int)MoveState.WalkN);
+        graph.Connect(runNPlayable, 0, moveMixer, (int)MoveState.RunN);
+        graph.Connect(runSPlayable, 0, moveMixer, (int)MoveState.RunS);
+        graph.Connect(jumpStartPlayable, 0, jumpMixer, (int)JumpState.JumpStart);
+        graph.Connect(inAirPlayable, 0, jumpMixer, (int)JumpState.InAir);
+        graph.Connect(jumpLandPlayable, 0, jumpMixer, (int)JumpState.JumpLand);
+        graph.Connect(walkNLandPlayable, 0, landingMixer, (int)LandingState.WalkNLand);
+        graph.Connect(runNLandPlayable, 0, landingMixer, (int)LandingState.RunNLand);
 
-        var output = AnimationPlayableOutput.Create(graph, "AnimationOutput", animator);
-        output.SetSourcePlayable(mixer);
+        // Connect Mixers to Root Mixer
+        graph.Connect(moveMixer, 0, rootMixer, (int)RootState.Move);
+        graph.Connect(jumpMixer, 0, rootMixer, (int)RootState.Jump);
+        graph.Connect(landingMixer, 0, rootMixer, (int)RootState.Landing);
 
-        SetPlayerState(PlayerState.Idle);
-        weights[0] = 1.0f;
-        mixer.SetInputWeight(0, weights[0]);
+        AnimationPlayableOutput output = AnimationPlayableOutput.Create(graph, "AnimationOutput", animator);
+        output.SetSourcePlayable(rootMixer);
+
+        SetMoveState(MoveState.Idle);
+        SetJumpState(JumpState.JumpStart);
+        SetLandingState(LandingState.WalkNLand);
+        SetRootState(RootState.Move);
 
         graph.Play();
     }
 
     void Update()
     {
-        HandleInput();
-        UpdateWeights();
-    }
+        HandleMovement();
+        HandleJump();
 
-    private void SetPlayerState(PlayerState state)
-    {
-        int activeIndex = (int)state;
-
-        for (int i = 0; i < numStates; i++)
+        if (isLanding)
         {
-            weights[i] = (i == activeIndex) ? 1.0f : 0.0f;
+            UpdateLanding();
         }
     }
 
-    private void HandleInput()
+    private void HandleMovement()
     {
-        bool isGrounded = controller.isGrounded;
         float horizontal = Input.GetAxisRaw("Horizontal");
         bool isWalking = Mathf.Abs(horizontal) > 0.1f;
         bool isRunning = Input.GetKey(KeyCode.LeftShift) && isWalking;
-        bool isJumping = Input.GetKeyDown(KeyCode.Space) && isGrounded;
+        bool isGrounded = controller.isGrounded;
 
-        // Move Character
+        if (isGrounded && verticalVelocity < 0f)
+        {
+            verticalVelocity = -2f;
+        }
+
+        verticalVelocity += gravity * Time.deltaTime;
+
         float speed = isRunning ? runSpeed : walkSpeed;
-        controller.Move(new Vector3(horizontal * speed * Time.deltaTime, 0, 0));
+        Vector3 move = new Vector3(horizontal * speed, verticalVelocity, 0);
+        controller.Move(move * Time.deltaTime);
 
-        // Do Jump
-        if (isJumping && isGrounded)
+        // Don't update move state if jumping or landing
+        if (isJumping || isLanding)
         {
-            controller.Move(new Vector3(0, jumpForce * Time.deltaTime, 0));
-            SetPlayerState(PlayerState.JumpStart);
+            return;
         }
 
-        // Apply Gravity
-        if (!isGrounded)
+        // Update Move State
+        if (!controller.isGrounded)
         {
-            controller.Move(new Vector3(0, gravity * Time.deltaTime, 0));
+            return;
         }
 
-        if (isGrounded)
+        if (!isWalking)
         {
-            if (isWalking)
+            SetMoveState(MoveState.Idle);
+        }
+        else if (isRunning)
+        {
+            if (horizontal > 0f)
             {
-                if (isRunning)
-                {
-                    SetPlayerState(PlayerState.RunN);
-                }
-                else
-                {
-                    SetPlayerState(PlayerState.WalkN);
-                }
+                SetMoveState(MoveState.RunN);
             }
             else
             {
-                SetPlayerState(PlayerState.Idle);
+                SetMoveState(MoveState.RunS);
             }
-        }
-        else if (controller.velocity.y < 0)
-        {
-            SetPlayerState(PlayerState.InAir);
         }
         else
         {
-            SetPlayerState(PlayerState.InAir);
+            SetMoveState(MoveState.WalkN);
         }
     }
 
-    private void UpdateWeights()
+    private void HandleJump()
     {
-        for (int i = 0; i < numStates; i++)
+        bool isGrounded = controller.isGrounded;
+
+        if (!isJumping && !isLanding && isGrounded && Input.GetKeyDown(KeyCode.Space))
         {
-            mixer.SetInputWeight(i, weights[i]);
+            StartJump();
+            return;
+        }
+
+        if (!isJumping)
+        {
+            return;
+        }
+
+        UpdateJumpState(isGrounded);
+    }
+
+    private void StartJump()
+    {
+        isJumping = true;
+        verticalVelocity = jumpForce;
+        currentJumpState = JumpState.JumpStart;
+
+        SetRootState(RootState.Jump);
+        SetJumpState(JumpState.JumpStart);
+    }
+
+    private void UpdateJumpState(bool isGrounded)
+    {
+        switch (currentJumpState)
+        {
+            case JumpState.JumpStart:
+                if (IsClipFinished(jumpStartPlayable))
+                {
+                    currentJumpState = JumpState.InAir;
+                    SetJumpState(JumpState.InAir);
+                }
+
+                break;
+
+            case JumpState.InAir:
+                if (isGrounded)
+                {
+                    currentJumpState = JumpState.JumpLand;
+                    SetJumpState(JumpState.JumpLand);
+                }
+
+                break;
+
+            case JumpState.JumpLand:
+                if (IsClipFinished(jumpLandPlayable))
+                {
+                    isJumping = false;
+                    StartLanding();
+                }
+
+                break;
         }
     }
 
-    void OnDestroy()
+    private void StartLanding()
+    {
+        isLanding = true;
+        SetRootState(RootState.Landing);
+        bool isRunning = Input.GetKey(KeyCode.LeftShift) && Mathf.Abs(Input.GetAxisRaw("Horizontal")) > 0.1f;
+
+        if (isRunning)
+        {
+            SetLandingState(LandingState.RunNLand);
+        }
+        else
+        {
+            SetLandingState(LandingState.WalkNLand);
+        }
+    }
+
+    private void UpdateLanding()
+    {
+        AnimationClipPlayable activePlayable;
+
+        if (landingMixer.GetInputWeight((int)LandingState.RunNLand) > 0.5f)
+        {
+            activePlayable = runNLandPlayable;
+        }
+        else
+        {
+            activePlayable = walkNLandPlayable;
+        }
+
+        if (!IsClipFinished(activePlayable))
+        {
+            return;
+        }
+
+        isLanding = false;
+        SetRootState(RootState.Move);
+    }
+
+    private void SetRootState(RootState state)
+    {
+        for (int i = 0; i < rootMixer.GetInputCount(); i++)
+        {
+            rootMixer.SetInputWeight(i, i == (int)state ? 1f : 0f);
+        }
+    }
+
+    private void SetMoveState(MoveState state)
+    {
+        for (int i = 0; i < moveMixer.GetInputCount(); i++)
+        {
+            moveMixer.SetInputWeight(i, i == (int)state ? 1f : 0f);
+        }
+    }
+
+    private void SetJumpState(JumpState state)
+    {
+        for (int i = 0; i < jumpMixer.GetInputCount(); i++)
+        {
+            jumpMixer.SetInputWeight(i, i == (int)state ? 1f : 0f);
+        }
+
+        ResetClipTime(state);
+    }
+
+    private void ResetClipTime(JumpState state)
+    {
+        switch (state)
+        {
+            case JumpState.JumpStart:
+                jumpStartPlayable.SetTime(0);
+                break;
+
+            case JumpState.InAir:
+                inAirPlayable.SetTime(0);
+                break;
+
+            case JumpState.JumpLand:
+                jumpLandPlayable.SetTime(0);
+                break;
+        }
+    }
+
+    private void SetLandingState(LandingState state)
+    {
+        for (int i = 0; i < landingMixer.GetInputCount(); i++)
+        {
+            landingMixer.SetInputWeight(i, i == (int)state ? 1f : 0f);
+        }
+
+        ResetLandingClipTime(state);
+    }
+
+    private void ResetLandingClipTime(LandingState state)
+    {
+        switch (state)
+        {
+            case LandingState.WalkNLand:
+                walkNLandPlayable.SetTime(0);
+                break;
+
+            case LandingState.RunNLand:
+                runNLandPlayable.SetTime(0);
+                break;
+        }
+    }
+
+    private bool IsClipFinished(AnimationClipPlayable playable)
+    {
+        double duration = playable.GetDuration();
+
+        if (duration <= 0)
+        {
+            return true;
+        }
+
+        return playable.GetTime() >= duration - 0.01f;
+    }
+
+    private void OnDestroy()
     {
         graph.Destroy();
     }
