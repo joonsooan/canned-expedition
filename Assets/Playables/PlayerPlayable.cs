@@ -216,7 +216,7 @@ public class PlayerPlayable : MonoBehaviour
         switch (currentJumpState)
         {
             case JumpState.JumpStart:
-                if (IsClipFinished(jumpStartPlayable) || !isGrounded)
+                if (IsClipFinished(jumpStartPlayable, jumpStartClip) || !isGrounded)
                 {
                     SetJumpState(JumpState.InAir);
                 }
@@ -232,7 +232,10 @@ public class PlayerPlayable : MonoBehaviour
                 break;
 
             case JumpState.JumpLand:
-                if (IsClipFinished(jumpLandPlayable) || jumpLandPlayable.GetTime() >= 1f)
+                double jumpLandTime = jumpLandPlayable.GetTime();
+                double jumpLandDuration = (jumpLandClip != null) ? jumpLandClip.length : 0.75f;
+
+                if (IsClipFinished(jumpLandPlayable, jumpLandClip) || jumpLandTime >= jumpLandDuration * 0.95f)
                 {
                     isJumping = false;
                     isLanding = false;
@@ -241,12 +244,6 @@ public class PlayerPlayable : MonoBehaviour
 
                 break;
         }
-    }
-
-    private void StartLanding()
-    {
-        isLanding = true;
-        SetRootState(RootState.Landing);
     }
 
     private void UpdateLanding()
@@ -347,18 +344,14 @@ public class PlayerPlayable : MonoBehaviour
         }
     }
 
-    private bool IsClipFinished(AnimationClipPlayable playable)
+    private bool IsClipFinished(AnimationClipPlayable playable, AnimationClip originalClip)
     {
         if (!playable.IsValid()) return true;
+        if (originalClip == null) return true;
 
-        double duration = playable.GetDuration();
-
-        if (duration <= 0)
-        {
-            return true;
-        }
-
-        return playable.GetTime() >= duration - 0.01f;
+        double duration = originalClip.length;
+        double currentTime = playable.GetTime();
+        return currentTime >= duration - 0.01f;
     }
 
     private void OnDestroy()

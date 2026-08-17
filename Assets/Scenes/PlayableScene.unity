@@ -148,6 +148,7 @@ MonoBehaviour:
   walkSpeed: 2
   runSpeed: 5
   rotateSpeed: 10
+  transitionSpeed: 5
   jumpForce: 8
   gravity: -9.81
 --- !u!143 &227350409
